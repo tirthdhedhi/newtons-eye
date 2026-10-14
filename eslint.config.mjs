@@ -1,10 +1,11 @@
-import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
-import nextTypescript from "eslint-config-next/typescript";
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier/flat";
 
-const eslintConfig = [
-  ...nextCoreWebVitals,
-  ...nextTypescript,
+export default tseslint.config(
+  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**"] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
   prettier,
   {
     rules: {
@@ -17,8 +18,20 @@ const eslintConfig = [
     },
   },
   {
-    ignores: [".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts"],
+    // core must stay pure: no UI or rendering imports
+    files: ["packages/core/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["react", "react-dom", "react/*", "three", "three/*", "@react-three/*"],
+              message: "packages/core must not import React or Three.",
+            },
+          ],
+        },
+      ],
+    },
   },
-];
-
-export default eslintConfig;
+);
