@@ -1,0 +1,21 @@
+{
+  "scene": "sliding-stop.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "t_stop": {
+      "value": 2.038736,
+      "unit": "s",
+      "note": "v0 / (mu_k g) = 2.0387"
+    },
+    "d": {
+      "value": 10.19368,
+      "unit": "m",
+      "note": "v0^2 / (2 mu_k g) = 10.194"
+    },
+    "W": {
+      "value": -100.0,
+      "unit": "J",
+      "note": "-1/2 m v0^2 = -100"
+    }
+  }
+}

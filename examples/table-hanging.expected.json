@@ -1,0 +1,16 @@
+{
+  "scene": "table-hanging.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a": {
+      "value": [5.1012, 0, 0],
+      "unit": "m/s^2",
+      "note": "(6g - 0.2*4g)/10 = 5.1012"
+    },
+    "T": {
+      "value": 28.2528,
+      "unit": "N",
+      "note": "m_cart (a + mu_k g) = 28.2528"
+    }
+  }
+}

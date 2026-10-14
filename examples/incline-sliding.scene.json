@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "title": "5 kg block on a 40 degree incline, mu_s 0.5, mu_k 0.4: it slides",
+  "duration": "2 s",
+  "bodies": [
+    {
+      "id": "block",
+      "shape": {
+        "kind": "box",
+        "size": [0.4, 0.2, 0.4]
+      },
+      "mass": "5 kg",
+      "position": [2.2338546, 2.0049673, 0],
+      "orientation": [0, 0, 0.3420201, 0.9396926]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "ramp",
+      "kind": "plane",
+      "point": [0, 0, 0],
+      "friction": {
+        "static": 0.5,
+        "kinetic": 0.4
+      },
+      "angle": "40 deg",
+      "extent": {
+        "length": "3 m",
+        "width": "1 m"
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "ramp"
+    }
+  ],
+  "queries": [
+    {
+      "id": "a",
+      "ask": "acceleration",
+      "body": "block",
+      "at": 0.5
+    },
+    {
+      "id": "f",
+      "ask": "force",
+      "force": "friction",
+      "body": "block",
+      "at": 0.5
+    },
+    {
+      "id": "N",
+      "ask": "force",
+      "force": "normal",
+      "body": "block",
+      "at": 0.5
+    }
+  ]
+}

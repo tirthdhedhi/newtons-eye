@@ -1,0 +1,21 @@
+{
+  "scene": "atwood.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a1": {
+      "value": [0, 2.4525, 0],
+      "unit": "m/s^2",
+      "note": "(m2 - m1) g / (m1 + m2) = 2.4525, up"
+    },
+    "a2": {
+      "value": [0, -2.4525, 0],
+      "unit": "m/s^2",
+      "note": "down"
+    },
+    "T": {
+      "value": 36.7875,
+      "unit": "N",
+      "note": "2 m1 m2 g / (m1 + m2) = 36.7875"
+    }
+  }
+}

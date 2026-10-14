@@ -102,6 +102,9 @@ export const Connection = z.discriminatedUnion("kind", [
       position: vec3("length"),
       mass: z.literal(0).optional(),
       radius: Length.optional(),
+      /** Points where each side of the string leaves the pulley. Default: the pulley position. */
+      endA: vec3("length").optional(),
+      endB: vec3("length").optional(),
     }),
     length: Length.optional(),
   }),

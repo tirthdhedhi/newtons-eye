@@ -1,0 +1,21 @@
+{
+  "scene": "incline-sliding.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a": {
+      "value": [-2.527784, -2.121063, 0],
+      "unit": "m/s^2",
+      "note": "g (sin40 - 0.4 cos40) = 3.2998"
+    },
+    "f": {
+      "value": 15.029792,
+      "unit": "N",
+      "note": "mu_k m g cos40"
+    },
+    "N": {
+      "value": 37.57448,
+      "unit": "N",
+      "note": "m g cos40"
+    }
+  }
+}

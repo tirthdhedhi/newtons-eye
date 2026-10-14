@@ -43,6 +43,15 @@ function findDerivedKeys(value: unknown, path: string, out: Issue[]): void {
   }
 }
 
+const RESERVED_EVENTS: ReadonlySet<string> = new Set([
+  "stop",
+  "edge",
+  "land",
+  "slack",
+  "taut",
+  "slide_start",
+]);
+
 function duplicates(ids: string[]): string[] {
   const seen = new Set<string>();
   const dup = new Set<string>();
@@ -112,6 +121,14 @@ export function validateScene(scene: Scene): { errors: Issue[]; warnings: Issue[
     }
   });
 
+  const perBody = new Map<string, number>();
+  for (const c of scene.contacts) perBody.set(c.body, (perBody.get(c.body) ?? 0) + 1);
+  for (const [body, n] of perBody) {
+    if (n > 1)
+      err("contacts", `body "${body}" has ${n} contacts; v1 supports one surface contact per body`);
+  }
+  if (!(scene.duration > 0)) err("duration", "duration must be > 0");
+
   scene.forces.forEach((f, i) => {
     const p = `forces[${i}]`;
     need(bodyIds, f.body, "body", `${p}.body`);
@@ -161,7 +178,7 @@ export function validateScene(scene: Scene): { errors: Issue[]; warnings: Issue[
       need(connectionIds, q.connection, "connection", `${p}.connection`);
     if ("frame" in q && q.frame) need(frameIds, q.frame, "frame", `${p}.frame`);
     if ("at" in q && q.at !== undefined && typeof q.at === "object") {
-      need(eventIds, q.at.event, "event", `${p}.at.event`);
+      if (!RESERVED_EVENTS.has(q.at.event)) need(eventIds, q.at.event, "event", `${p}.at.event`);
     }
     if (q.ask === "time") {
       const ev = q.until.event;

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { Body, Connection, Contact, Force, Frame, Query, Surface, UserEvent } from "./entities";
-import { vec3 } from "./primitives";
+import { qty, vec3 } from "./primitives";
 
 export const Scene = z.strictObject({
   version: z.literal(1),
   title: z.string().optional(),
+  /** How long to simulate. */
+  duration: qty("time").default(10),
   environment: z
     .strictObject({ gravity: vec3("acceleration").default([0, -9.81, 0]) })
     .default({ gravity: [0, -9.81, 0] }),

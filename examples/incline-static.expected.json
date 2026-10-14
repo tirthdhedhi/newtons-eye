@@ -1,0 +1,21 @@
+{
+  "scene": "incline-static.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a": {
+      "value": [0, 0, 0],
+      "unit": "m/s^2",
+      "note": "tan30 = 0.577 < 0.6, so it sticks"
+    },
+    "f": {
+      "value": 24.525,
+      "unit": "N",
+      "note": "m g sin30 = 24.525"
+    },
+    "mu_min": {
+      "value": 0.57735,
+      "unit": "",
+      "note": "tan30"
+    }
+  }
+}

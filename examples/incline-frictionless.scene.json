@@ -1,12 +1,17 @@
 {
   "version": 1,
   "title": "5 kg block sliding down a frictionless 30 degree incline, 2 m long",
+  "duration": "2 s",
   "bodies": [
     {
       "id": "block",
-      "shape": { "kind": "box", "size": [0.4, 0.2, 0.4] },
+      "shape": {
+        "kind": "box",
+        "size": [0.4, 0.2, 0.4]
+      },
       "mass": "5 kg",
-      "position": [1.6821, 1.0866, 0]
+      "position": [1.6820508, 1.0866025, 0],
+      "orientation": [0, 0, 0.258819, 0.9659258]
     }
   ],
   "surfaces": [
@@ -14,15 +19,44 @@
       "id": "ramp",
       "kind": "plane",
       "point": [0, 0, 0],
+      "friction": {
+        "static": 0,
+        "kinetic": 0
+      },
       "angle": "30 deg",
-      "extent": { "length": "2 m", "width": "1 m" },
-      "friction": { "static": 0, "kinetic": 0 }
+      "extent": {
+        "length": "2 m",
+        "width": "1 m"
+      }
     }
   ],
-  "contacts": [{ "body": "block", "surface": "ramp" }],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "ramp"
+    }
+  ],
   "queries": [
-    { "id": "a", "ask": "acceleration", "body": "block", "at": 0 },
-    { "id": "N", "ask": "force", "force": "normal", "body": "block", "at": 0 },
-    { "id": "t_edge", "ask": "time", "until": { "event": "edge" }, "body": "block" }
+    {
+      "id": "a",
+      "ask": "acceleration",
+      "body": "block",
+      "at": 0
+    },
+    {
+      "id": "N",
+      "ask": "force",
+      "force": "normal",
+      "body": "block",
+      "at": 0
+    },
+    {
+      "id": "t_edge",
+      "ask": "time",
+      "until": {
+        "event": "edge"
+      },
+      "body": "block"
+    }
   ]
 }

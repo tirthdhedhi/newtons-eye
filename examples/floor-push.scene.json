@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "title": "10 kg block pushed with 50 N on a floor (mu_s 0.4, mu_k 0.3)",
+  "duration": "3 s",
+  "bodies": [
+    {
+      "id": "block",
+      "shape": {
+        "kind": "box",
+        "size": [0.6, 0.4, 0.4]
+      },
+      "mass": "10 kg",
+      "position": [0, 0.2, 0]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "floor",
+      "kind": "plane",
+      "point": [0, 0, 0],
+      "friction": {
+        "static": 0.4,
+        "kinetic": 0.3
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "floor"
+    }
+  ],
+  "forces": [
+    {
+      "id": "push",
+      "kind": "applied",
+      "body": "block",
+      "vector": [50, 0, 0],
+      "at": {
+        "frame": "body",
+        "offset": [-0.3, 0, 0]
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "a",
+      "ask": "acceleration",
+      "body": "block",
+      "at": 1
+    },
+    {
+      "id": "f",
+      "ask": "force",
+      "force": "friction",
+      "body": "block",
+      "at": 1
+    },
+    {
+      "id": "N",
+      "ask": "force",
+      "force": "normal",
+      "body": "block",
+      "at": 1
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "scene": "spring-block.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "x": {
+      "value": [0.495601, 0.1, 0],
+      "unit": "m",
+      "note": "0.5 cos(5 t), omega = sqrt(k/m) = 5 rad/s"
+    },
+    "v": {
+      "value": [0.330879, 0, 0],
+      "unit": "m/s",
+      "note": "-2.5 sin(5 t)"
+    }
+  }
+}
