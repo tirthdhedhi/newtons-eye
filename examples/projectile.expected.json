@@ -1,0 +1,16 @@
+{
+  "scene": "projectile.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "p": {
+      "value": [20, 0.38, 0],
+      "unit": "m",
+      "note": "x = vx t, y = vy t - g t^2 / 2"
+    },
+    "v": {
+      "value": [10, -9.62, 0],
+      "unit": "m/s",
+      "note": "vy - g t"
+    }
+  }
+}

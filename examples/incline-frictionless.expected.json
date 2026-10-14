@@ -1,0 +1,21 @@
+{
+  "scene": "incline-frictionless.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a": {
+      "value": [-4.247855, -2.4525, 0],
+      "unit": "m/s^2",
+      "note": "g sin30 = 4.905 down the slope"
+    },
+    "N": {
+      "value": 42.478546,
+      "unit": "N",
+      "note": "m g cos30"
+    },
+    "t_edge": {
+      "value": 0.903047,
+      "unit": "s",
+      "note": "sqrt(2 d / a), d = 2 m"
+    }
+  }
+}

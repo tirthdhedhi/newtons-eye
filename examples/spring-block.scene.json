@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "title": "4 kg block on a frictionless floor attached to a 100 N/m spring, released from 0.5 m",
+  "duration": "5 s",
+  "bodies": [
+    {
+      "id": "block",
+      "shape": {
+        "kind": "box",
+        "size": [0.3, 0.2, 0.3]
+      },
+      "mass": "4 kg",
+      "position": [0.5, 0.1, 0]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "floor",
+      "kind": "plane",
+      "point": [0, 0, 0],
+      "friction": {
+        "static": 0,
+        "kinetic": 0
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "floor"
+    }
+  ],
+  "forces": [
+    {
+      "id": "spring",
+      "kind": "spring",
+      "body": "block",
+      "anchor": {
+        "point": [0, 0.1, 0]
+      },
+      "k": "100 N/m",
+      "restLength": 0
+    }
+  ],
+  "queries": [
+    {
+      "id": "x",
+      "ask": "position",
+      "body": "block",
+      "at": 5
+    },
+    {
+      "id": "v",
+      "ask": "velocity",
+      "body": "block",
+      "at": 5
+    }
+  ]
+}

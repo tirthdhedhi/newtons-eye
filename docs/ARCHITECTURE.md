@@ -1,67 +1,29 @@
 # Architecture
 
-## Pipeline
+Scene JSON (givens only) -> `parseScene` (Zod + semantic validation, everything converted to SI)
+-> `solve` -> `Timeline` + answers -> web viewer.
 
-```
-problem text
-    │
-    ▼
-┌─────────────────┐   POST /api/parse   lib/parser
-│  LLM parser     │   text -> ParseResult (Zod-validated JSON)
-└─────────────────┘   extracts quantities + source spans, picks an archetype
-    │ ParseResult{status:"ok", archetype, input}
-    ▼
-┌─────────────────┐   POST /api/solve   lib/archetypes/<id>/solver.ts
-│  Solver         │   input -> SolveResult (regime, answers, steps)
-└─────────────────┘   pure TypeScript, deterministic
-    │ SolveResult{status:"ok", steps}
-    ▼
-┌─────────────────┐   lib/archetypes/<id>/template.tsx + components/engine
-│  Renderer       │   builds a Scene + Timeline, syncs the diagram to the active step
-└─────────────────┘
-```
+## Solver (`packages/core/src/solver`)
 
-All three stages talk only through the Zod schemas in `lib/schemas/common.ts`. That is what lets
-parser, solver, and renderer work proceed in parallel.
+- `model.ts`: SI scene -> indexed model (planes with basis `u` up-slope, `n` normal, `w` axis; contacts; strings).
+- `instant.ts`: for one regime assignment at one state, builds **one linear system** (body force balances,
+  contact constraints, string constraints) and solves accelerations, normal forces, static friction and tensions.
+- `regimes.ts`: chooses regimes. Sticking is tested first (a = 0, required friction vs mu_s N); otherwise the
+  contact slides with kinetic friction opposing motion (or opposing the impending motion when starting from rest).
+  A string goes slack if its tension would be negative. A contact lifts if its normal force would be negative.
+- `motion.ts`: closed-form constant-acceleration motion, or RK4 (h = 1 ms) when forces change with position
+  (springs) or when the analytic acceleration is not constant inside the segment.
+- `events.ts`: earliest event in a segment: stop, edge, land, lift, slack, taut, slide start. Scheduled changes
+  (force windows, release, cut string, set force) are segment breakpoints.
+- `simulate.ts`: loop of segments. `Timeline.at(t)` is a pure lookup, so scrubbing backward works.
+- `queries.ts`: answers scene queries from the timeline.
 
-## The rule: the LLM never computes
+Known v1 limits: particles only (orientation is carried, never integrated), one surface contact per body,
+ideal massless pulleys, inelastic landing, no body-body collisions. Statically indeterminate setups (two
+bodies held by static friction with a taut string between them) split the load with T = 0.
 
-The LLM's only job is **extraction**: turning prose into a `ParseResult` whose quantities carry
-their original value, unit, and source span in the problem text. It must not do arithmetic,
-choose a regime, or produce answers.
+## Web (`apps/web`)
 
-Every number a student sees in an answer or step comes from a solver in
-`lib/archetypes/<id>/solver.ts`. Solvers are pure functions: no network, no LLM, no randomness.
-This is why answers can be verified, and it is why `golden.json` exists.
-
-If the parser is unsure, it returns `status: "ambiguous"` with clarifying questions rather
-than guessing.
-
-## Units
-
-Quantities are normalized to SI in `Quantity.value` / `Quantity.unit`. `Quantity.original`
-keeps what the student wrote so the UI can echo it back. Conversions happen in code (mathjs),
-not in the LLM.
-
-## Renderer
-
-`components/engine` is renderer-agnostic. `Scene` holds `Primitive`s in SI coordinates with an
-optional `z`, so a 2D SVG renderer and a future 3D renderer can share archetype templates. Each
-`Step.highlight` lists primitive ids; the `Timeline` turns steps into per-primitive `Emphasis`.
-
-## Adding an archetype
-
-1. Open a "New archetype proposal" issue with at least three real problems and verified answers.
-2. Add the id to `ARCHETYPE_IDS` in `lib/schemas/common.ts`.
-3. Create `lib/archetypes/<id>/` with:
-   - `schema.ts`: Zod schema for the input (`archetype: z.literal("<id>")` plus quantities)
-   - `solver.ts`: `solve(input) => SolveResult`, pure and deterministic
-   - `template.tsx`: component taking `ArchetypeTemplateProps<Input>`
-   - `golden.json`: verified cases (format in `lib/archetypes/incline/README.md`)
-   - `README.md`: scope and conventions
-4. Register it in `lib/archetypes/registry.ts` (add to `ArchetypeInputs` and `archetypes`).
-   TypeScript fails the build until every id has a complete module.
-5. Teach the parser about it in `lib/parser/systemPrompt.ts`.
-6. Run `pnpm test`; the golden-data test validates your cases against both schemas.
-
-Archetypes must not import from each other. Shared helpers go in `lib/`.
+React + react-three-fiber viewer, force arrows scaled to the largest force in the run, a free body diagram
+(SVG, x-y projection), an answers table that compares against `examples/*.expected.json`, and a playback
+slider. `?example=<name>&t=<seconds>` opens an example at a time.

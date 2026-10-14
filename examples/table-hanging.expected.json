@@ -1,0 +1,26 @@
+{
+  "scene": "table-hanging.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "t_slack": {
+      "value": 0.442755,
+      "unit": "s",
+      "note": "hanging block lands: sqrt(2 h / a) = 0.4427 s"
+    },
+    "t_stop": {
+      "value": 1.593919,
+      "unit": "s",
+      "note": "cart then coasts at mu_k g: t_land + v / (mu_k g)"
+    },
+    "a": {
+      "value": [5.1012, 0, 0],
+      "unit": "m/s^2",
+      "note": "(6g - 0.2*4g)/10 = 5.1012"
+    },
+    "T": {
+      "value": 28.2528,
+      "unit": "N",
+      "note": "m_cart (a + mu_k g) = 28.2528"
+    }
+  }
+}

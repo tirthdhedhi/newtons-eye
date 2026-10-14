@@ -1,0 +1,21 @@
+{
+  "scene": "floor-push.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "a": {
+      "value": [2.057, 0, 0],
+      "unit": "m/s^2",
+      "note": "(50 - 0.3*10*9.81)/10 = 2.057"
+    },
+    "f": {
+      "value": 29.43,
+      "unit": "N",
+      "note": "mu_k m g"
+    },
+    "N": {
+      "value": 98.1,
+      "unit": "N",
+      "note": "m g"
+    }
+  }
+}

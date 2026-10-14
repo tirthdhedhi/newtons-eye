@@ -1,14 +1,10 @@
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 
-# next.js
-/.next/
-/out/
-next-env.d.ts
-
 # production
+dist
 /build
 
 # testing
