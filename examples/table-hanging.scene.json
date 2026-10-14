@@ -46,6 +46,10 @@
     {
       "body": "cart",
       "surface": "table"
+    },
+    {
+      "body": "hang",
+      "surface": "floor"
     }
   ],
   "connections": [
@@ -72,6 +76,21 @@
       "force": "tension",
       "connection": "rope",
       "at": 0.2
+    },
+    {
+      "id": "t_slack",
+      "ask": "time",
+      "until": {
+        "event": "slack"
+      }
+    },
+    {
+      "id": "t_stop",
+      "ask": "time",
+      "until": {
+        "event": "stop"
+      },
+      "body": "cart"
     }
   ]
 }
