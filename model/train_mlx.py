@@ -1,7 +1,8 @@
 """mlx_lm.lora with stability fixes for 7B models (their loss went NaN without them).
 
 * The 4-bit checkpoint stores scales, biases and norms in float16, and Qwen2.5-7B overflows
-  float16 activations (that was the NaN). They are cast to float32 at load time (bfloat16 trained unstably).
+  float16 activations (that was the NaN). They are cast to float32 at load time (bfloat16
+  trained unstably).
 * LoRA weights are float32 (the base model stays quantized, in its own dtype).
 * Gradients are clipped to a global norm of ``CLIP`` before each Adam update.
 

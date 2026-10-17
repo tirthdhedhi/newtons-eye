@@ -5,8 +5,9 @@
     python -m parser_model.evaluate --model qwen7b-v2 --outputs results/qwen7b-seed-outputs.json \
         --seed data/seed.jsonl
 
-The model is loaded the way ``train_mlx.py`` trained it (float16 parameters cast to float32), because
-the 4-bit Qwen2.5-7B overflows in float16. The prompt is the fine-tuning prompt (no schema, no examples).
+The model is loaded the way ``train_mlx.py`` trained it (float16 parameters cast to float32),
+because the 4-bit Qwen2.5-7B overflows in float16. The prompt is the fine-tuning prompt (no
+schema, no examples).
 """
 
 import argparse
