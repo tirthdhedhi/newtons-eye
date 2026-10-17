@@ -50,6 +50,30 @@ class InferError(RuntimeError):
     pass
 
 
+def simplify_schema(node: Any) -> Any:
+    """Rewrite the schema into the subset grammar converters (llama.cpp, Ollama) accept.
+
+    Tuple arrays (``prefixItems`` with ``items: false``) become plain arrays whose ``items`` is
+    the (any of the) element schema(s), keeping ``minItems``/``maxItems``. Validation still uses
+    the original schema; this is only what is sent to constrain decoding.
+    """
+    if isinstance(node, list):
+        return [simplify_schema(n) for n in node]
+    if not isinstance(node, dict):
+        return node
+    out = {k: simplify_schema(v) for k, v in node.items()}
+    prefix = out.pop("prefixItems", None)
+    if prefix is not None:
+        unique = []
+        for item in prefix:
+            if item not in unique:
+                unique.append(item)
+        out["items"] = unique[0] if len(unique) == 1 else {"anyOf": unique}
+    elif out.get("items") is False:
+        out.pop("items")
+    return out
+
+
 def clean_output(raw: str) -> str:
     """Drop ``<think>`` blocks and a surrounding markdown code fence; nothing else."""
     text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
@@ -67,7 +91,7 @@ class ChatClient:
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.config = config
-        self.schema = schema
+        self.schema = simplify_schema(schema) if schema is not None else None
         self._mode_index = 0
         self._think_params_ok = True
         headers = {"Authorization": f"Bearer {config.api_key or 'none'}"}
@@ -89,6 +113,11 @@ class ChatClient:
             mode = self.mode
             url, payload = self._request(messages, mode)
             response = self._post(url, payload)
+            if self.config.constrained and _schema_rejected(response):
+                raise InferError(
+                    f"the server cannot compile the schema (not a missing feature): "
+                    f"{response.text[:400]}"
+                )
             can_fall_back = self._mode_index < len(CONSTRAINED_MODES) - 1
             if response.status_code in REJECTED and self.config.constrained and can_fall_back:
                 self._mode_index += 1
@@ -159,6 +188,12 @@ class ChatClient:
             payload = {k: v for k, v in payload.items() if k not in THINK_PARAMS}
             response = self._http.post(url, json=payload)
         return response
+
+
+def _schema_rejected(response: httpx.Response) -> bool:
+    """True for 4xx replies about the schema itself; falling back would silently drop it."""
+    text = response.text.lower()
+    return response.status_code in REJECTED and "schema" in text and "conversion" in text
 
 
 def _mentions_think_param(text: str) -> bool:

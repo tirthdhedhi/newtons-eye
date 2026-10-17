@@ -200,3 +200,46 @@ def test_detect_context_defaults_and_unknown(monkeypatch):
 
     monkeypatch.setattr(infer.httpx, "post", down)
     assert infer.detect_context_length("http://srv/v1", "m") is None
+
+
+# --- schema simplification ---
+
+
+def test_simplify_schema_removes_tuple_arrays():
+    from parser_model.infer import simplify_schema
+
+    tup = {
+        "type": "array",
+        "prefixItems": [{"type": "number"}, {"type": "number"}],
+        "items": False,
+        "minItems": 2,
+        "maxItems": 2,
+    }
+    assert simplify_schema({"properties": {"v": tup}}) == {
+        "properties": {
+            "v": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+        }
+    }
+    mixed = {"prefixItems": [{"type": "number"}, {"type": "string"}], "items": False}
+    assert simplify_schema(mixed) == {"items": {"anyOf": [{"type": "number"}, {"type": "string"}]}}
+
+
+def test_real_schema_has_no_false_items_or_prefix_items_after_simplify():
+    from parser_model.infer import simplify_schema
+
+    text = json.dumps(simplify_schema(paths.load_schema()))
+    assert "prefixItems" not in text and '"items": false' not in text
+
+
+def test_schema_conversion_error_is_not_silently_dropped():
+    from parser_model.infer import InferError
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        return httpx.Response(400, text="JSON schema conversion failed: bad")
+
+    with pytest.raises(InferError, match="cannot compile"):
+        client(handler, constrained=True).complete(MSGS)
+    assert len(seen) == 1
