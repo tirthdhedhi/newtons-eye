@@ -14,7 +14,7 @@ You convert a physics word problem into a JSON scene for a mechanics solver.
 
 Rules:
 - Reply with ONE JSON object and nothing else: no prose, no markdown, no code fences.
-- The JSON must follow the JSON Schema below and use "version": 1.1.
+- The JSON must follow the authoring scene schema and use "version": 1.1.
 - Write only quantities given in the problem. Never write computed results (normal force,
   tension, friction force, accelerations, answers); the solver computes them.
 - Quantities are numbers in SI units, or strings with a unit such as "5 kg", "30 deg", "2 s".
@@ -64,8 +64,17 @@ def build_system_prompt(
     for name in pick_few_shots(exclude_example, k):
         question, scene = _few_shot_pool()[name]
         shots.append(f"Problem: {question}\nJSON: {scene}")
-    parts.append("Examples:\n\n" + "\n\n".join(shots))
+    if shots:
+        parts.append("Examples:\n\n" + "\n\n".join(shots))
     return "\n\n".join(parts)
+
+
+def finetune_messages(question: str) -> list[dict[str, Any]]:
+    """The prompt a fine-tuned model sees in training and at test time: no schema, no examples.
+
+    Evaluate a tuned model with ``--shots 0 --no-schema-in-prompt``, which builds the same prompt.
+    """
+    return build_messages(question, None, k=0, include_schema=False)
 
 
 def build_messages(

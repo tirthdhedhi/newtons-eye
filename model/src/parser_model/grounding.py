@@ -7,7 +7,7 @@ must then match one of them, compared by absolute value, or be in ``DEFAULTS``.
 
 Documented allowances:
 
-* ``DEFAULTS``: ``g = 9.81`` and ``0`` (zero friction, zero offset, zero angle).
+* ``DEFAULTS``: ``g = 9.81``, ``0`` (zero friction, offset or angle) and 90 degrees ("straight up").
 * Derived values: for any two question quantities of the same dimension, ``hypot`` of the pair and
   ``atan2`` of the pair (radians) are allowed, so "10 m/s across and 10 m/s up" may be written as
   ``14.142 m/s at 45 deg``.
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from itertools import permutations
 from typing import Any
 
-DEFAULTS: tuple[float, ...] = (9.81, 0.0)
+DEFAULTS: tuple[float, ...] = (9.81, 0.0, math.pi / 2)
 REL_TOL = 1e-3
 ABS_TOL = 1e-9
 
