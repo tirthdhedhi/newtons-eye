@@ -5,8 +5,9 @@ import jsonschema
 import pytest
 
 from parser_model import paths
-from parser_model.generate import FAMILIES, be, fix_articles, make_problems, verify
+from parser_model.generate import FAMILIES, fix_articles, make_problems, verify
 from parser_model.grounding import check_grounding
+from parser_model.phrasing import be
 from parser_model.prompts import finetune_messages
 
 
