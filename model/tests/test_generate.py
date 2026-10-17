@@ -62,3 +62,32 @@ def test_closed_form_answers_match_the_real_solver(family):
     for _ in range(6):
         problem = FAMILIES[family](rng)
         assert verify(problem) == [], json.dumps(problem.scene)
+
+
+def test_paraphrase_filter():
+    from parser_model.paraphrase import keep
+
+    scene = {"queries": [{"id": "a", "ask": "acceleration", "body": "b", "at": 1}]}
+    original = "A 5 kg block is pushed with 20 N. Find its acceleration at t = 1 s."
+    good = "I shove a 5 kg block with a 20 N push. How is it accelerating after 1 s, in m/s^2?"
+    assert keep(original, good + " Please compute the acceleration.", scene) is None
+    assert (
+        keep(original, "A 6 kg block is pushed with 20 N. What is its acceleration at 1 s?", scene)
+        == "numbers"
+    )
+    assert (
+        keep(
+            original,
+            "A 5 kg block is pushed with 20 N. What is its velocity at 1 s, I wonder?",
+            scene,
+        )
+        == "asks"
+    )
+    assert (
+        keep(
+            original,
+            "A 5 kg block is pushed with 20 N and slides. Find its acceleration at 1 s.",
+            scene,
+        )
+        == "leak"
+    )
