@@ -41,6 +41,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--example", action="append", help="only these examples (repeatable)")
     p.add_argument("--style", action="append", help="only these styles (repeatable)")
     p.add_argument("--limit", type=int, help="stop after N items")
+    p.add_argument(
+        "--outputs",
+        help="score a JSON file {item id: raw model output} instead of calling a model "
+        "(e.g. outputs generated on Colab); --model then only labels the results",
+    )
     p.add_argument("--out-dir", default=str(paths.model_dir() / "results"))
     return p.parse_args(argv)
 
@@ -93,6 +98,7 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
         timeout=args.timeout,
     )
     client = ChatClient(config, schema=schema)
+    offline = json.loads(Path(args.outputs).read_text()) if args.outputs else None
     prompt_chars = sum(
         len(m["content"])
         for m in build_messages("", None, k=args.shots, include_schema=not args.no_schema_in_prompt)
@@ -110,6 +116,21 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
     results: list[ItemResult] = []
     try:
         for n, item in enumerate(items, 1):
+            if offline is not None:
+                raw, info = offline.get(item["id"], ""), {"mode": "offline"}
+                if item["id"] not in offline:
+                    info = {"mode": "offline", "error": "no output for this item"}
+                result = evaluate_item(item, raw, schema=schema, gold=gold, solver=solve_scene)
+                result.infer = info
+                if "error" in info:
+                    result.failures.insert(0, f"infer_error: {info['error']}")
+                results.append(result)
+                flags = "".join("." if getattr(result, m) else "x" for m in METRICS)
+                print(
+                    f"[{n}/{len(items)}] {item['id']:<36} {flags}  {result.failure_reason[:80]}",
+                    file=sys.stderr,
+                )
+                continue
             messages = build_messages(
                 item["question"],
                 item["example"],

@@ -164,3 +164,18 @@ Known limits of what the solver can ask (found while writing the generator): the
 events are `stop`, `edge`, `slack`, `slide_start`, so "time to hit the ground" and "maximum height"
 cannot be asked; and a `distance` query covers only the simulation window, so stopping distance
 needs a work window in the same scene to extend it.
+
+### Training on Colab / Kaggle instead (7B)
+
+`colab/train_qwen7b.ipynb` trains the same data with Hugging Face PEFT (4-bit LoRA) and writes the raw
+model outputs to `outputs.json`. `colab/bundle.zip` (gitignored; rebuild it by zipping `data/ft/{train,val,test}.jsonl` and
+`data/seed.jsonl` under `data/`) is the only upload. Back here, score the outputs with exactly the
+same metrics as any other model (the solver runs locally, so Colab does not need Node):
+
+```bash
+.venv/bin/python -m parser_model.evaluate --model qwen7b-colab --outputs outputs.json --seed data/seed.jsonl
+.venv/bin/python -m parser_model.evaluate --model qwen7b-colab --outputs outputs.json --seed data/ft/test.jsonl
+```
+
+Note: a free T4 has no bf16, so fp16 training can overflow (the MLX 7B run hit NaN losses). If the
+notebook's loss goes NaN, use an L4/A100 runtime or lower the learning rate.
