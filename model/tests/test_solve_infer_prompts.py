@@ -169,3 +169,34 @@ def test_server_errors_are_not_swallowed():
     c = client(lambda r: httpx.Response(500, text="boom"), constrained=True)
     with pytest.raises(InferError, match="500"):
         c.complete(MSGS)
+
+
+# --- context detection ---
+
+
+def test_detect_context_length(monkeypatch):
+    from parser_model import infer
+
+    def fake_post(url, json, timeout):
+        assert url == "http://srv/api/show"
+        body = {"parameters": "num_ctx                        16384\\nstop  x"}
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(infer.httpx, "post", fake_post)
+    assert infer.detect_context_length("http://srv/v1", "m") == 16384
+
+
+def test_detect_context_defaults_and_unknown(monkeypatch):
+    from parser_model import infer
+
+    def no_params(url, json, timeout):
+        return httpx.Response(200, json={}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(infer.httpx, "post", no_params)
+    assert infer.detect_context_length("http://srv/v1", "m") == 4096
+
+    def down(url, json, timeout):
+        raise httpx.ConnectError("no")
+
+    monkeypatch.setattr(infer.httpx, "post", down)
+    assert infer.detect_context_length("http://srv/v1", "m") is None

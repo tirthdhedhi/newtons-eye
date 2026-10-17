@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 REJECTED = {400, 404, 405, 415, 422, 501}
+OLLAMA_DEFAULT_CTX = 4096
 THINK_PARAMS = ("chat_template_kwargs", "reasoning_effort", "think")
 CONSTRAINED_MODES = ("json_schema", "guided_json", "llama_cpp", "ollama_native", "json_object")
 
@@ -170,3 +171,20 @@ def _read_body(body: dict[str, Any], mode: str) -> tuple[str, dict[str, Any]]:
         return body.get("message", {}).get("content", ""), usage
     message = body["choices"][0]["message"]
     return message.get("content") or "", body.get("usage", {})
+
+
+def detect_context_length(base_url: str, model: str, timeout: float = 10.0) -> int | None:
+    """The context window an Ollama server will really use for ``model``, else ``None``.
+
+    Reads ``num_ctx`` from ``/api/show`` (a Modelfile ``PARAMETER``). Without one, Ollama uses its
+    default of 4096, so that is returned. Non-Ollama servers do not answer, giving ``None``.
+    """
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.post(f"{root}/api/show", json={"model": model}, timeout=timeout)
+        response.raise_for_status()
+        parameters = response.json().get("parameters") or ""
+    except (httpx.HTTPError, ValueError):
+        return None
+    match = re.search(r"^\s*num_ctx\s+(\d+)", parameters, flags=re.MULTILINE)
+    return int(match.group(1)) if match else OLLAMA_DEFAULT_CTX

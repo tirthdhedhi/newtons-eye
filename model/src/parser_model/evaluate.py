@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from . import paths
-from .infer import ChatClient, InferConfig, InferError
+from .infer import ChatClient, InferConfig, InferError, detect_context_length
 from .metrics import METRICS, GoldCache, ItemResult, evaluate_item, summarize
 from .prompts import build_messages
 from .solve import solve_scene
@@ -97,11 +97,13 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
         len(m["content"])
         for m in build_messages("", None, k=args.shots, include_schema=not args.no_schema_in_prompt)
     )
-    if prompt_chars / 2.5 > 4000:
+    prompt_tokens = int(prompt_chars / 2.5)
+    context = detect_context_length(args.base_url, args.model)
+    if context is not None and context < prompt_tokens + args.max_tokens:
         print(
-            f"warning: prompts are ~{int(prompt_chars / 2.5)} tokens. Servers with a small "
-            "default context (Ollama: 4096) silently truncate them and the scores are "
-            "meaningless; raise the context (see model/README.md) or pass --no-schema-in-prompt.",
+            f"warning: prompts are ~{prompt_tokens} tokens but the server context is {context}. "
+            "Prompts get silently truncated and the scores are meaningless; raise the context "
+            "(see model/README.md) or pass --no-schema-in-prompt.",
             file=sys.stderr,
         )
     gold = GoldCache(lambda ex: json.loads(paths.gold_scene_path(ex).read_text()), solve_scene)
@@ -143,6 +145,7 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
         "args": vars(args),
         "constrained_mode": client.mode,
         "prompt_chars_estimate": prompt_chars,
+        "server_context": context,
         "schema": str(paths.schema_path().relative_to(paths.repo_root())),
         "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }

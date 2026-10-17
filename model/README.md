@@ -26,12 +26,15 @@ Tests marked `solver` are skipped when pnpm cannot run.
 
 The prompt holds the whole schema plus 3 worked examples, roughly 6-8k tokens. **Ollama's default
 context is 4096 tokens, which silently truncates it** and makes the scores meaningless (the harness
-warns about this). Raise it:
+reads the model's `num_ctx` from Ollama and warns when it is too small). Raise it:
 
 ```bash
 OLLAMA_CONTEXT_LENGTH=16384 ollama serve      # or: ollama run <model>, then /set parameter num_ctx 16384
 ollama pull qwen2.5:7b
 ```
+
+To keep a server running as-is, bake the context into a model variant instead:
+`printf 'FROM qwen2.5:7b\nPARAMETER num_ctx 16384\n' > Modelfile && ollama create qwen2.5-16k -f Modelfile`.
 
 Any OpenAI-compatible server works: Ollama (`http://localhost:11434/v1`, the default),
 llama.cpp (`llama-server -m model.gguf -c 16384 --port 8080`, then `--base-url http://localhost:8080/v1`),
