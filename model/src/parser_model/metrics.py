@@ -192,6 +192,11 @@ class GoldCache:
         self._solver = solver
         self._cache: dict[str, tuple[dict[str, Any], SolveResult]] = {}
 
+    def put(self, key: str, scene: dict[str, Any]) -> None:
+        """Use ``scene`` as the gold for ``key`` (synthetic items carry their own gold scene)."""
+        if key not in self._cache:
+            self._cache[key] = (scene, self._solver(scene))
+
     def get(self, example: str) -> tuple[dict[str, Any], SolveResult]:
         if example not in self._cache:
             scene = self._loader(example)
@@ -257,7 +262,11 @@ def evaluate_item(
         result.failures.append(f"ungrounded: {shown}")
 
     if solved.ok and solved.answers is not None:
-        gold_scene, gold_solved = gold.get(item["example"])
+        gold_key = item["example"]
+        if "scene" in item:  # generated items carry their own gold scene
+            gold_key = item["id"]
+            gold.put(gold_key, item["scene"])
+        gold_scene, gold_solved = gold.get(gold_key)
         if not gold_solved.ok or gold_solved.answers is None:
             result.failures.append(f"gold_unsolvable: exit {gold_solved.exit_code}")
         else:

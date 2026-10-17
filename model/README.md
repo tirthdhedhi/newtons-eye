@@ -121,3 +121,46 @@ src/parser_model/  prompts.py infer.py solve.py grounding.py metrics.py evaluate
 tests/             grounding, signatures, metrics (synthetic), infer fallbacks, real-solver self-check
 data/seed.jsonl    27 questions
 ```
+
+## Fine-tuning (LoRA on Apple silicon with MLX)
+
+Training data is generated, not scraped: `parser_model.generate` has six template families
+(floor-push, incline, sliding-stop, projectile, free-fall, spring-block). Each problem has three
+phrasings (textbook, casual, terse), a gold authoring scene, and closed-form answers that are
+**checked against the real solver** before the problem is kept. `parser_model.openstax` extracts
+exercises from OpenStax University Physics (CC BY) into `private/` as a source of real textbook
+phrasing for the held-out test set.
+
+```bash
+# 1. build the dataset (1500 verified problems -> train/val/test, split by problem)
+.venv/bin/python -m parser_model.dataset --problems 1500 --seed 0 --out data/ft
+mkdir -p data/ft/mlx && cp data/ft/train.jsonl data/ft/mlx/ && cp data/ft/val.jsonl data/ft/mlx/valid.jsonl
+
+# 2. train (separate venv: python3.12 -m venv .venv-train && .venv-train/bin/pip install mlx-lm)
+BASE=$(ls -d ~/.cache/huggingface/hub/models--mlx-community--Qwen2.5-Coder-7B-Instruct-4bit/snapshots/*)
+.venv-train/bin/python -m mlx_lm.lora --model "$BASE" --train --data data/ft/mlx \
+  --adapter-path adapters/qwen7b-v1 --iters 1200 --batch-size 4 --num-layers 16 \
+  --learning-rate 1e-4 --max-seq-length 1280 --grad-checkpoint
+
+# 3. serve the tuned model (OpenAI-compatible) and evaluate with the SAME short prompt as training
+.venv-train/bin/python -m mlx_lm.server --model "$BASE" --adapter-path adapters/qwen7b-v1 --port 8081
+.venv/bin/python -m parser_model.evaluate --model tuned --base-url http://localhost:8081/v1 \
+  --shots 0 --no-schema-in-prompt --seed data/seed.jsonl           # the 27 hand-written questions
+.venv/bin/python -m parser_model.evaluate --model tuned --base-url http://localhost:8081/v1 \
+  --shots 0 --no-schema-in-prompt --seed data/ft/test.jsonl         # held-out generated problems
+```
+
+Rules the data pipeline enforces (`splits.py`, `dataset.py`):
+
+* Split by *problem*: all phrasings of a problem share a split (about 70/10/20 train/val/test).
+* The 27 seed questions and their gold scenes are never in train/val; a generated problem whose
+  scene equals a hand-written example is dropped.
+* The prompt is the same short one in training and at test time (`prompts.finetune_messages`),
+  which has no schema text and no examples. The model has to have learned the schema.
+* `data/ft/`, `adapters/` and `private/` are gitignored. Everything in `data/ft` is reproducible
+  from the seed.
+
+Known limits of what the solver can ask (found while writing the generator): the only `time`
+events are `stop`, `edge`, `slack`, `slide_start`, so "time to hit the ground" and "maximum height"
+cannot be asked; and a `distance` query covers only the simulation window, so stopping distance
+needs a work window in the same scene to extend it.

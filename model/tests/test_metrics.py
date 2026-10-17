@@ -172,3 +172,12 @@ def test_real_solver_exit_codes():
     assert ok.exit_code == 0 and set(ok.answers) == {"p", "v"} and ok.warnings
     bad = solve_scene({"version": 1.1})
     assert bad.exit_code == 1 and bad.issues
+
+
+def test_items_with_their_own_gold_scene():
+    item = {**ITEM, "id": "syn/x", "example": "incline", "scene": GOLD_SCENE}
+    gold = GoldCache(
+        lambda ex: pytest.fail("must not load examples/ for generated items"), FakeSolver()
+    )
+    r = evaluate_item(item, json.dumps(good_scene()), schema=SCHEMA, gold=gold, solver=FakeSolver())
+    assert r.solver_match
