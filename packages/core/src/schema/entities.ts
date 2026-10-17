@@ -49,66 +49,71 @@ export const ForcePoint = z.strictObject({
   offset: vec3("length").optional(),
 });
 
-export const Force = z.union([
-  z.strictObject({
-    id: Id,
-    kind: z.literal("applied"),
-    body: Id,
-    vector: vec3("force"),
-    frame: z.enum(["world", "surface", "body"]).default("world"),
-    surface: Id.optional(),
-    at: ForcePoint.optional(),
-    during: z.tuple([Time, Time.nullable()]).optional(),
-  }),
-  z.strictObject({
-    id: Id,
-    kind: z.literal("applied"),
-    body: Id,
-    magnitude: qty("force"),
-    /** Angle of the force above the surface, measured in the surface's plane. */
-    directionAngle: qty("angle"),
-    relativeTo: Id,
-    at: ForcePoint.optional(),
-    during: z.tuple([Time, Time.nullable()]).optional(),
-  }),
-  z.strictObject({
-    id: Id,
-    kind: z.literal("spring"),
-    body: Id,
-    anchor: z.union([z.strictObject({ body: Id }), z.strictObject({ point: vec3("length") })]),
-    k: qty("stiffness"),
-    restLength: Length,
-    at: ForcePoint.optional(),
-    anchorAt: ForcePoint.optional(),
-  }),
-]);
+export const AppliedVectorForce = z.strictObject({
+  id: Id,
+  kind: z.literal("applied"),
+  body: Id,
+  vector: vec3("force"),
+  frame: z.enum(["world", "surface", "body"]).default("world"),
+  surface: Id.optional(),
+  at: ForcePoint.optional(),
+  during: z.tuple([Time, Time.nullable()]).optional(),
+});
 
-export const Connection = z.discriminatedUnion("kind", [
-  z.strictObject({
-    id: Id,
-    kind: z.literal("string"),
-    a: Id,
-    b: Id,
-    length: Length.optional(),
-    massless: z.literal(true).optional(),
-  }),
-  z.strictObject({
-    id: Id,
-    kind: z.literal("pulley_string"),
-    a: Id,
-    b: Id,
-    /** Ideal pulley (massless, frictionless). A massive pulley is a later version. */
-    pulley: z.strictObject({
-      position: vec3("length"),
-      mass: z.literal(0).optional(),
-      radius: Length.optional(),
-      /** Points where each side of the string leaves the pulley. Default: the pulley position. */
-      endA: vec3("length").optional(),
-      endB: vec3("length").optional(),
-    }),
-    length: Length.optional(),
-  }),
-]);
+export const AppliedAngleForce = z.strictObject({
+  id: Id,
+  kind: z.literal("applied"),
+  body: Id,
+  magnitude: qty("force"),
+  /** Angle of the force above the surface, measured in the surface's plane. */
+  directionAngle: qty("angle"),
+  relativeTo: Id,
+  at: ForcePoint.optional(),
+  during: z.tuple([Time, Time.nullable()]).optional(),
+});
+
+export const SpringForce = z.strictObject({
+  id: Id,
+  kind: z.literal("spring"),
+  body: Id,
+  anchor: z.union([z.strictObject({ body: Id }), z.strictObject({ point: vec3("length") })]),
+  k: qty("stiffness"),
+  restLength: Length,
+  at: ForcePoint.optional(),
+  anchorAt: ForcePoint.optional(),
+});
+
+export const Force = z.union([AppliedVectorForce, AppliedAngleForce, SpringForce]);
+
+export const StringConnection = z.strictObject({
+  id: Id,
+  kind: z.literal("string"),
+  a: Id,
+  b: Id,
+  length: Length.optional(),
+  massless: z.literal(true).optional(),
+});
+
+/** Ideal pulley (massless, frictionless). A massive pulley is a later version. */
+export const Pulley = z.strictObject({
+  position: vec3("length"),
+  mass: z.literal(0).optional(),
+  radius: Length.optional(),
+  /** Points where each side of the string leaves the pulley. Default: the pulley position. */
+  endA: vec3("length").optional(),
+  endB: vec3("length").optional(),
+});
+
+export const PulleyStringConnection = z.strictObject({
+  id: Id,
+  kind: z.literal("pulley_string"),
+  a: Id,
+  b: Id,
+  pulley: Pulley,
+  length: Length.optional(),
+});
+
+export const Connection = z.discriminatedUnion("kind", [StringConnection, PulleyStringConnection]);
 
 export const Frame = z.strictObject({
   id: Id,

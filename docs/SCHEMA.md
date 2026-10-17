@@ -18,3 +18,38 @@ Source of truth: `packages/core/src/schema`. Scene JSON holds only givens.
 - Keys the solver computes (`normal`, `tension`, `acceleration`, `answer`, ...) are rejected anywhere in the JSON.
 - `parseScene(json)` returns the SI scene or a list of `{ path, message }` issues, plus warnings.
 - `examples/<name>.scene.json` pairs with `<name>.expected.json` (hand-computed values per query id).
+
+## Authoring layer (schema v1.1)
+
+A scene with `"version": 1.1` may use sugar that `parseScene` resolves into the canonical SI scene above
+(`version: 1`). Canonical scenes validate exactly as before. An authoring scene holds only quantities that appear
+in a word problem: no coordinates, quaternions, shape sizes, durations, or pulley/anchor positions.
+Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes `schema/authoring.schema.json`.
+
+- `body.shape` optional, default box `[0.4, 0.2, 0.4]`. `body.position` optional (origin, or resting on its contact surface).
+- `body.placement`:
+  - `{ on: <planeId>, at: "top" | "bottom" | <distance> }`: rest flush on the plane (`top` is the extent length along the slope).
+    Position and orientation are computed. `{ on, offset: <distance> }` is the same for horizontal planes.
+  - `{ hangingFrom: <connectionId>, above: <planeId>, gap: <distance> }`: straight below that end of a `pulley_string`.
+- `body.velocity` may also be `{ speed, angle }` (above horizontal, toward +x) or `{ speed, along: <planeId>, direction: "up" | "down" }`.
+- `pulley_string.pulley.position` may be `{ at: "edge_of", surface: <planeId> }` (far end of the surface's `extent`,
+  level with the connected body resting on it). If omitted it is inferred the same way from a connected body's contact.
+- `surfaces[].point` optional (origin). `spring.anchor` may be `{ fixed: true, stretch: <distance> }`: the anchor is
+  fixed so the spring is at natural length at the body's placement, and the body starts displaced by `stretch`.
+- `duration` optional: the latest time any query references (events included) + 1 s, at least 2 s.
+- Every default or inference is returned in `parseScene(...).warnings`.
+
+`pnpm solve <file>` accepts either form and prints `{ queryId: value }`; on a validation failure it prints the issues
+to stderr and exits 1.
+
+### Examples that cannot yet be written without coordinates
+
+`examples/<name>.authoring.json` exist for floor-push, incline-frictionless, incline-sliding, incline-static,
+projectile, sliding-stop and spring-block. Two examples are not expressible with the sugar above:
+
+- **atwood**: two masses hang from a pulley with no surface. `hangingFrom` needs an `above` plane, and `edge_of`
+  needs a surface, so there is no way to place the pulley or the two masses (and the separate start heights).
+- **table-hanging**: the table is 1 m above the floor and its edge is at the pulley. A plane's height (`point`) is a
+  coordinate, and `edge_of` needs a finite `extent` positioned by `point`; nothing says "this table is 1 m high"
+  or "the cart starts 2 m from the edge". The pieces (`edge_of`, `hangingFrom`) work once the table's `point` is
+  given (covered by a unit test), but that is a coordinate.

@@ -1,0 +1,54 @@
+{
+  "version": 1.1,
+  "title": "5 kg block on a 30 degree incline with mu_s 0.6: it stays put",
+  "bodies": [
+    {
+      "id": "block",
+      "mass": "5 kg",
+      "placement": {
+        "on": "ramp",
+        "at": "top"
+      }
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "ramp",
+      "kind": "plane",
+      "angle": "30 deg",
+      "extent": {
+        "length": "4 m"
+      },
+      "friction": {
+        "static": 0.6,
+        "kinetic": 0.4
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "ramp"
+    }
+  ],
+  "queries": [
+    {
+      "id": "a",
+      "ask": "acceleration",
+      "body": "block",
+      "at": 1
+    },
+    {
+      "id": "f",
+      "ask": "force",
+      "force": "friction",
+      "body": "block",
+      "at": 1
+    },
+    {
+      "id": "mu_min",
+      "ask": "min_mu_s",
+      "body": "block"
+    }
+  ]
+}

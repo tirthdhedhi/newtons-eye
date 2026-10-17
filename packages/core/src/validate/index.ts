@@ -1,4 +1,7 @@
+import { AUTHORING_VERSION, AuthoringScene } from "../authoring/schema";
+import { resolveAuthoring } from "../authoring/resolve";
 import { Scene } from "../schema";
+import type { ZodError } from "zod";
 
 export interface Issue {
   path: string;
@@ -197,29 +200,48 @@ export function validateScene(scene: Scene): { errors: Issue[]; warnings: Issue[
   return { errors, warnings };
 }
 
-/** JSON in, a typed SI scene out (or a list of readable issues). */
+const formatPath = (path: PropertyKey[]): string =>
+  path
+    .map((s) => (typeof s === "number" ? `[${s}]` : `.${String(s)}`))
+    .join("")
+    .replace(/^\./, "");
+
+const zodIssues = (error: ZodError): Issue[] =>
+  error.issues.map((i) => ({ path: formatPath(i.path), message: i.message }));
+
+/** True when the JSON declares the authoring layer (`"version": 1.1`). */
+const isAuthoring = (json: unknown): boolean =>
+  typeof json === "object" &&
+  json !== null &&
+  (json as { version?: unknown }).version === AUTHORING_VERSION;
+
+/**
+ * JSON in, a typed SI scene out (or a list of readable issues).
+ * Accepts the canonical form (`version: 1`) or the authoring form (`version: 1.1`), which is
+ * resolved into the canonical form first. `warnings` lists every default and inference made.
+ */
 export function parseScene(json: unknown): ParseResult {
   const bad: Issue[] = [];
   findDerivedKeys(json, "", bad);
   if (bad.length > 0) return { ok: false, errors: bad, warnings: [] };
 
-  const parsed = Scene.safeParse(json);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      errors: parsed.error.issues.map((i) => ({
-        path: i.path
-          .map((s) => (typeof s === "number" ? `[${s}]` : `.${String(s)}`))
-          .join("")
-          .replace(/^\./, ""),
-        message: i.message,
-      })),
-      warnings: [],
-    };
+  let input: unknown = json;
+  const assumed: Issue[] = [];
+  if (isAuthoring(json)) {
+    const authored = AuthoringScene.safeParse(json);
+    if (!authored.success) return { ok: false, errors: zodIssues(authored.error), warnings: [] };
+    const resolved = resolveAuthoring(authored.data);
+    if (!resolved.ok) return { ok: false, errors: resolved.errors, warnings: resolved.warnings };
+    input = resolved.scene;
+    assumed.push(...resolved.warnings);
   }
 
+  const parsed = Scene.safeParse(input);
+  if (!parsed.success) return { ok: false, errors: zodIssues(parsed.error), warnings: assumed };
+
   const { errors, warnings } = validateScene(parsed.data);
+  const all = [...assumed, ...warnings];
   return errors.length > 0
-    ? { ok: false, errors, warnings }
-    : { ok: true, scene: parsed.data, warnings };
+    ? { ok: false, errors, warnings: all }
+    : { ok: true, scene: parsed.data, warnings: all };
 }

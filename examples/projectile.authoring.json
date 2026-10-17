@@ -1,0 +1,28 @@
+{
+  "version": 1.1,
+  "title": "Ball thrown at 10 m/s horizontally and 10 m/s up",
+  "bodies": [
+    {
+      "id": "ball",
+      "mass": "0.5 kg",
+      "velocity": {
+        "speed": "14.142135623730951 m/s",
+        "angle": "45 deg"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "p",
+      "ask": "position",
+      "body": "ball",
+      "at": 2
+    },
+    {
+      "id": "v",
+      "ask": "velocity",
+      "body": "ball",
+      "at": 2
+    }
+  ]
+}

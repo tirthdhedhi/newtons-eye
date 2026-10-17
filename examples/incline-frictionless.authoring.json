@@ -1,0 +1,57 @@
+{
+  "version": 1.1,
+  "title": "5 kg block sliding down a frictionless 30 degree incline, 2 m long",
+  "bodies": [
+    {
+      "id": "block",
+      "mass": "5 kg",
+      "placement": {
+        "on": "ramp",
+        "at": "top"
+      }
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "ramp",
+      "kind": "plane",
+      "angle": "30 deg",
+      "extent": {
+        "length": "2 m"
+      },
+      "friction": {
+        "static": 0,
+        "kinetic": 0
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "ramp"
+    }
+  ],
+  "queries": [
+    {
+      "id": "a",
+      "ask": "acceleration",
+      "body": "block",
+      "at": 0
+    },
+    {
+      "id": "N",
+      "ask": "force",
+      "force": "normal",
+      "body": "block",
+      "at": 0
+    },
+    {
+      "id": "t_edge",
+      "ask": "time",
+      "until": {
+        "event": "edge"
+      },
+      "body": "block"
+    }
+  ]
+}

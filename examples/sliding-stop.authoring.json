@@ -1,0 +1,52 @@
+{
+  "version": 1.1,
+  "title": "Block sliding at 10 m/s on a floor, mu_k 0.5: when and where does it stop?",
+  "bodies": [
+    {
+      "id": "block",
+      "mass": "2 kg",
+      "velocity": {
+        "speed": "10 m/s",
+        "angle": "0 deg"
+      }
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "floor",
+      "kind": "plane",
+      "friction": {
+        "static": 0.6,
+        "kinetic": 0.5
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "body": "block",
+      "surface": "floor"
+    }
+  ],
+  "queries": [
+    {
+      "id": "t_stop",
+      "ask": "time",
+      "until": {
+        "event": "stop"
+      },
+      "body": "block"
+    },
+    {
+      "id": "d",
+      "ask": "distance",
+      "body": "block"
+    },
+    {
+      "id": "W",
+      "ask": "work",
+      "body": "block",
+      "from": 0,
+      "to": "6 s"
+    }
+  ]
+}
