@@ -179,3 +179,27 @@ same metrics as any other model (the solver runs locally, so Colab does not need
 
 Note: a free T4 has no bf16, so fp16 training can overflow (the MLX 7B run hit NaN losses). If the
 notebook's loss goes NaN, use an L4/A100 runtime or lower the learning rate.
+
+### 7B on a 16 GB Mac: the float16 NaN, and the fix
+
+`mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` stores its scales, biases and norms in float16, and
+Qwen2.5-7B overflows float16 activations: the loss goes NaN after ~20 iterations at any learning
+rate (the 3B model is fine). bfloat16 trained unstably instead. What works is float32 activations
+(the 4-bit weights stay packed):
+
+```bash
+# train (same flags as mlx_lm.lora; adds float32 cast + gradient clipping)
+.venv-train/bin/python train_mlx.py --model "$BASE7" --train --data data/ft2/mlx \
+  --adapter-path adapters/qwen7b-v2 --iters 900 --batch-size 4 --num-layers 16 \
+  --learning-rate 5e-5 --max-seq-length 1280 --grad-checkpoint
+
+# generate with the same dtype (the stock mlx_lm.server would load float16 and overflow),
+# then score offline with the usual metrics
+PYTHONPATH=src .venv-train/bin/python generate_mlx.py --base "$BASE7" --adapter adapters/qwen7b-v2 \
+  --seed data/hard.jsonl --out results/qwen7b-hard-outputs.json
+.venv/bin/python -m parser_model.evaluate --model qwen7b-v2 --outputs results/qwen7b-hard-outputs.json \
+  --seed data/hard.jsonl
+```
+
+Speed on an M-series Mac with 16 GB: about 135 tokens/s, so roughly 10 s per iteration at batch 4.
+Do not run generation while training: both want the GPU memory.
