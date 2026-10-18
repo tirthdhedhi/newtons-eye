@@ -32,7 +32,7 @@ def test_every_family_yields_schema_valid_grounded_scenes(family):
     rng = random.Random(11)
     for _ in range(40):
         problem = FAMILIES[family](rng)
-        if family == "unsupported":
+        if family in ("unsupported", "partial"):
             assert set(problem.scene) == {"unsupported"} and problem.scene["unsupported"]
             assert set(problem.questions) == {"textbook", "casual", "terse"}
             continue
@@ -48,7 +48,7 @@ def test_questions_never_leak_outcomes():
     banned = ("slides", "sticks", "stays put", "does not move", "won't move")
     rng = random.Random(2)
     for name, make in FAMILIES.items():
-        if name == "unsupported":  # these may say what happens: they are refused anyway
+        if name in ("unsupported", "partial"):  # refused anyway, so they may say what happens
             continue
         for _ in range(30):
             for question in make(rng).questions.values():
@@ -119,3 +119,14 @@ def test_friction_given_modes():
         assert (mu_s == mu_k == 0.4) if mode != "both" else (mu_s, mu_k) == (0.5, 0.4)
     assert all(v > 20 for v in seen.values())
     assert friction_given(rng, 0.0, 0.0) == (0.0, 0.0, "both")
+
+
+def test_partial_refusals_extend_an_in_scope_question():
+    from parser_model.generate import partial_problem
+
+    rng = random.Random(8)
+    for _ in range(20):
+        p = partial_problem(rng)
+        assert set(p.scene) == {"unsupported"}
+        assert all(len(q) > 40 for q in p.questions.values())
+        assert any(w in p.questions["textbook"].lower() for w in ("also", "in addition"))

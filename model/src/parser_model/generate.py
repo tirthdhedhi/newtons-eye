@@ -238,18 +238,21 @@ def floor_push(rng: random.Random) -> Problem:
             "how fast the {w} is accelerating",
             "its acceleration",
             "the {w}'s acceleration",
+            "whether the {w} moves and, if it does, its acceleration",
         ],
         "f": [
             "the friction force on the {w}",
             "the force of friction acting on it",
             "the friction force",
             "the magnitude of the friction force",
+            "the frictional force acting on the {w}",
         ],
         "N": [
             "the normal force on the {w}",
             "the normal force the floor exerts on it",
             "the normal force",
             "the magnitude of the normal force",
+            "the normal reaction of the floor",
         ],
     }
     asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
@@ -391,6 +394,7 @@ def incline(rng: random.Random) -> Problem:
             "the normal force on the {w}",
             "the normal force the incline exerts on it",
             "the normal force",
+            "the normal reaction of the incline",
         ],
         "t_edge": [
             "how long the {w} takes to reach the bottom edge of the incline",
@@ -912,12 +916,22 @@ def ramp(rng: random.Random) -> Problem:
     expected = {n: answers[n] for n in names}
     compare = {"a": "norm", "f": "value", "N": "value"}
     ask_words = {
-        "a": ["the acceleration of the {w}", "its acceleration", "the {w}'s acceleration"],
-        "f": ["the friction force on the {w}", "the friction force acting on it"],
+        "a": [
+            "the acceleration of the {w} down the plane",
+            "its acceleration",
+            "the {w}'s acceleration",
+            "how fast it speeds up along the ramp (its acceleration)",
+        ],
+        "f": [
+            "the friction force on the {w}",
+            "the friction force acting on it",
+            "the frictional force acting on it",
+        ],
         "N": [
             "the normal force on the {w}",
             "the force the ramp exerts on the {w} (the normal force)",
             "the normal force",
+            "the normal reaction of the ramp",
         ],
     }
     asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
@@ -1037,6 +1051,8 @@ def flight(rng: random.Random) -> Problem:
             "how long the {w} is in the air",
             "the time it takes the {w} to reach the ground",
             "when the {w} hits the ground",
+            "the total time to reach the ground",
+            "the time taken to reach the ground",
         ],
         "H": (
             [
@@ -1057,11 +1073,14 @@ def flight(rng: random.Random) -> Problem:
             "the horizontal range",
             "the horizontal distance the {w} travels",
             "how far from the launch point it lands, measured horizontally",
+            "the horizontal distance travelled",
         ],
         "V": [
             "the speed with which it hits the ground",
             "the magnitude of its impact velocity",
             "its speed just before it lands",
+            "the speed of impact",
+            "its impact velocity",
         ],
     }
     asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
@@ -1161,6 +1180,8 @@ def spring_release(rng: random.Random) -> Problem:
             "the net force on the {w} at the instant of release",
             "the initial net force on the {w}",
             "the force that acts on it right after it is released (the net force)",
+            "the initial restoring force",
+            "the force the spring exerts at the moment of release",
         ],
         "a": [
             "the initial acceleration of the {w}",
@@ -1232,8 +1253,17 @@ def kinematics(rng: random.Random) -> Problem:
     expected = {n: expected[n] for n in names}
     compare = {"v": "x", "x": "x", "d": "value"}
     ask_words = {
-        "v": ["its final velocity", "its velocity at the end", "how fast it is going at the end"],
-        "x": ["its displacement", "its position at the end, measured from the start"],
+        "v": [
+            "its final velocity",
+            "its velocity at the end",
+            "how fast it is going at the end",
+            "its final speed",
+        ],
+        "x": [
+            "its displacement",
+            "its position at the end, measured from the start",
+            "its displacement during this interval",
+        ],
         "d": ["the distance it covers", "how far it travels", "the distance travelled"],
     }
     asks = [pick(rng, ask_words[n]) for n in names]
@@ -1263,6 +1293,30 @@ def unsupported_problem(rng: random.Random) -> Problem:
     return Problem("unsupported", questions, {"unsupported": category}, {}, {})
 
 
+PARTIAL_EXTRAS = [
+    ("the kinetic energy it has at the end", "energy"),
+    ("its momentum at the end", "momentum"),
+    ("the power needed", "power"),
+    ("the speed it has when it gets back to its starting point", "motion after a return"),
+    ("the total mechanical energy", "energy"),
+    ("the angular velocity", "rotation"),
+]
+
+
+def partial_problem(rng: random.Random) -> Problem:
+    """An in-scope problem that also asks for something the solver cannot compute: refuse."""
+    base_family = pick(rng, [f for f in FAMILIES if f not in ("unsupported", "partial")])
+    base = FAMILIES[base_family](rng)
+    extra, reason = pick(rng, PARTIAL_EXTRAS)
+    sentence = {
+        "textbook": pick(rng, [f" Also find {extra}.", f" In addition, determine {extra}."]),
+        "casual": pick(rng, [f" And what is {extra}?", f" Also, I need {extra}."]),
+        "terse": pick(rng, [f" Also: {extra}.", f" And {extra}."]),
+    }
+    questions = {k: base.questions[k].rstrip() + sentence[k] for k in base.questions}
+    return Problem("partial", questions, {"unsupported": reason}, {}, {})
+
+
 FAMILIES: dict[str, Callable[[random.Random], Problem]] = {
     "floor-push": floor_push,
     "incline": incline,
@@ -1276,6 +1330,7 @@ FAMILIES: dict[str, Callable[[random.Random], Problem]] = {
     "spring-release": spring_release,
     "kinematics": kinematics,
     "unsupported": unsupported_problem,
+    "partial": partial_problem,
 }
 WEIGHTS = {
     "floor-push": 3,
@@ -1290,6 +1345,7 @@ WEIGHTS = {
     "spring-release": 2,
     "kinematics": 4,
     "unsupported": 5,
+    "partial": 3,
 }
 
 
