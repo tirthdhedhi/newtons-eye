@@ -85,6 +85,21 @@ def asks_ok(question: str, scene: dict[str, Any]) -> bool:
     return True
 
 
+# A paraphrase must not bring in physics the original did not state.
+DRIFT_WORDS = ("compress", "compression", "elastic", "bounce", "rebound", "air resistance")
+
+
+def drifted(original: str, candidate: str) -> bool:
+    low_o, low_c = original.lower(), candidate.lower()
+    for word in DRIFT_WORDS:
+        if word in low_c and word not in low_o:
+            # "neglect/ignore air resistance" is a statement, not new physics
+            if word == "air resistance" and re.search(r"(neglect|ignor|no|without)", low_c):
+                continue
+            return True
+    return False
+
+
 def keep(original: str, candidate: str, scene: dict[str, Any]) -> str | None:
     """None if the paraphrase is acceptable, otherwise the reason it was rejected."""
     if len(candidate) < 30 or "\n\n" in candidate.strip():
@@ -95,6 +110,8 @@ def keep(original: str, candidate: str, scene: dict[str, Any]) -> str | None:
         return "asks"
     if re.search(r"\b(slides?|sticks?|stays? put|doesn't move|does not move)\b", candidate.lower()):
         return "leak"
+    if drifted(original, candidate):
+        return "drift"
     return None
 
 

@@ -157,3 +157,17 @@ def test_dataset_drops_val_test_questions_that_also_appear_in_train(tmp_path):
                 else f"Problem: {row['question']}\nJSON:"
             )
             assert q not in train_q
+
+
+def test_paraphrase_drift_filter():
+    from parser_model.paraphrase import drifted
+
+    stretched = "A 2 kg block on a spring of 100 N/m is stretched by 0.5 m and released."
+    assert drifted(stretched, "A 2 kg block on a spring is compressed by 0.5 m and released.")
+    assert not drifted(
+        stretched, "A 2 kg block hangs on a 100 N/m spring pulled out 0.5 m, released."
+    )
+    assert not drifted(
+        stretched, "Ignore air resistance. A 2 kg block on a spring, stretched 0.5 m."
+    )
+    assert drifted(stretched, "The 2 kg block bounces back from the wall after release.")

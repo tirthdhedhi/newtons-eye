@@ -18,6 +18,7 @@ from typing import Any
 
 from . import paths
 from .generate import build
+from .paraphrase import drifted
 from .prompts import finetune_messages
 from .splits import _normalise, assign, check_no_leakage
 
@@ -128,8 +129,17 @@ def main(argv: list[str] | None = None) -> int:
         for pid, why in report["dropped"][:10]:
             print(f"  dropped {pid}: {why[:120]}")
     records = load_records(raw)
+    by_id = {r["id"]: r for r in records}
+    dropped_drift = 0
     for extra in args.extra:
-        records += load_records(Path(extra))
+        for r in load_records(Path(extra)):
+            base = by_id.get(r["id"].removeprefix("para/"))
+            if base is not None and drifted(base["question"], r["question"]):
+                dropped_drift += 1
+                continue
+            records.append(r)
+    if dropped_drift:
+        print(f"dropped {dropped_drift} paraphrases that changed the physics")
     summary = make_dataset(records, out, tuple(args.holdout_family))
     print(json.dumps(summary, indent=2))
     return 0
