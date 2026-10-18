@@ -83,15 +83,18 @@ def query_signature(query: dict[str, Any], scene: dict[str, Any] | None = None) 
     conns = _connection_names(scene, bodies)
     body = query.get("body")
     conn = query.get("connection")
+    ask = query.get("ask")
+    above = query.get("above") or ("ground" if ask == "max_height" else None)
     return (
-        query.get("ask"),
+        ask,
         bodies.get(body, body),
         query.get("force"),
         conns.get(conn, conn),
         _canon(query.get("until")),
-        _si(query.get("at")),
+        _canon(query.get("at")),
         _si(query.get("from")),
         _si(query.get("to")),
+        above,
     )
 
 
@@ -145,7 +148,9 @@ def _describe(sig: Signature) -> str:
     return " ".join(
         f"{k}={v}"
         for k, v in zip(
-            ("ask", "body", "force", "conn", "until", "at", "from", "to"), sig, strict=True
+            ("ask", "body", "force", "conn", "until", "at", "from", "to", "above"),
+            sig,
+            strict=True,
         )
         if v is not None
     )
@@ -236,6 +241,18 @@ def evaluate_item(
         return result
     result.scene = scene
     result.valid_json = True
+
+    refused = set(scene) == {"unsupported"}
+    if item.get("expect") == "unsupported":
+        # Out of scope: the only correct answer is a refusal; every check passes with it.
+        if refused:
+            result.schema_valid = result.solver_ok = result.grounded = result.solver_match = True
+        else:
+            result.failures.append("should_refuse: produced a scene for an unsupported question")
+        return result
+    if "unsupported" in scene:
+        result.failures.append(f"refused_in_scope: {scene.get('unsupported')}")
+        return result
 
     errors = sorted(
         jsonschema.Draft202012Validator(schema).iter_errors(scene), key=lambda e: list(e.path)

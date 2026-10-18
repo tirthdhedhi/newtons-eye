@@ -19,7 +19,10 @@ Rules:
   tension, friction force, accelerations, answers); the solver computes them.
 - Quantities are numbers in SI units, or strings with a unit such as "5 kg", "30 deg", "2 s".
 - Add one query for every quantity the problem asks for.
-- Do not invent values the problem does not give.\
+- Do not invent values the problem does not give.
+- If the problem cannot be written as a scene (for example vectors, circular motion, pulleys,
+  springs in series, a missing mass, or an unknown that must be found from the motion), reply
+  {"unsupported": "<short reason>"} instead.\
 """
 
 SEED_PATH = model_dir() / "data" / "seed.jsonl"

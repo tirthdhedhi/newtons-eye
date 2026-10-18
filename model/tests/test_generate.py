@@ -32,6 +32,10 @@ def test_every_family_yields_schema_valid_grounded_scenes(family):
     rng = random.Random(11)
     for _ in range(40):
         problem = FAMILIES[family](rng)
+        if family == "unsupported":
+            assert set(problem.scene) == {"unsupported"} and problem.scene["unsupported"]
+            assert set(problem.questions) == {"textbook", "casual", "terse"}
+            continue
         assert validator.is_valid(problem.scene), problem.scene
         assert set(problem.questions) == {"textbook", "casual", "terse"}
         assert set(problem.expected) == {q["id"] for q in problem.scene["queries"]}
@@ -43,7 +47,9 @@ def test_every_family_yields_schema_valid_grounded_scenes(family):
 def test_questions_never_leak_outcomes():
     banned = ("slides", "sticks", "stays put", "does not move", "won't move")
     rng = random.Random(2)
-    for make in FAMILIES.values():
+    for name, make in FAMILIES.items():
+        if name == "unsupported":  # these may say what happens: they are refused anyway
+            continue
         for _ in range(30):
             for question in make(rng).questions.values():
                 assert not any(word in question.lower() for word in banned), question
@@ -91,3 +97,25 @@ def test_paraphrase_filter():
         )
         == "leak"
     )
+
+
+def test_unsupported_categories_all_render():
+    from parser_model.unsupported import CATEGORIES
+
+    rng = random.Random(1)
+    for name, make in CATEGORIES.items():
+        for text in make(rng):
+            assert len(text) > 10, name
+
+
+def test_friction_given_modes():
+    from parser_model.generate import friction_given
+
+    rng = random.Random(4)
+    seen = {"both": 0, "kinetic": 0, "single": 0}
+    for _ in range(400):
+        mu_s, mu_k, mode = friction_given(rng, 0.5, 0.4)
+        seen[mode] += 1
+        assert (mu_s == mu_k == 0.4) if mode != "both" else (mu_s, mu_k) == (0.5, 0.4)
+    assert all(v > 20 for v in seen.values())
+    assert friction_given(rng, 0.0, 0.0) == (0.0, 0.0, "both")

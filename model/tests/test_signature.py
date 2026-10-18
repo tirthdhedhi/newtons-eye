@@ -104,3 +104,19 @@ def test_tolerance_is_relative_1e_3():
     assert not values_close([1.0, 0.0], [1.0, 0.0, 0.0])
     assert not values_close(None, 1.0)
     assert not values_close(1.0, [1.0])
+
+
+def test_max_height_signature_defaults_to_ground_and_separates_start():
+    ground = query_signature({"ask": "max_height", "body": "b"})
+    assert ground == query_signature({"ask": "max_height", "body": "b", "above": "ground"})
+    assert ground != query_signature({"ask": "max_height", "body": "b", "above": "start"})
+
+
+def test_event_times_and_landing_queries_are_part_of_the_signature():
+    land = {"ask": "velocity", "body": "b", "at": {"event": "land"}}
+    assert query_signature(land) != query_signature({"ask": "velocity", "body": "b", "at": 1})
+    assert query_signature(land) == query_signature(dict(land))
+    until_land = {"ask": "time", "body": "b", "until": {"event": "land"}}
+    assert query_signature(until_land) != query_signature(
+        {"ask": "time", "body": "b", "until": {"event": "stop"}}
+    )

@@ -80,6 +80,7 @@ def make_dataset(
                 "style": r["style"],
                 "question": r["question"],
                 "scene": r["scene"],
+                **({"expect": r["expect"]} if "expect" in r else {}),
             }
             for r in splits["test"]
         ],
