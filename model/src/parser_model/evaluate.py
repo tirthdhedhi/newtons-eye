@@ -97,7 +97,7 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
         max_tokens=args.max_tokens,
         timeout=args.timeout,
     )
-    client = ChatClient(config, schema=schema)
+    client = ChatClient(config, schema=paths.constrained_schema() if args.constrained else None)
     offline = json.loads(Path(args.outputs).read_text()) if args.outputs else None
     prompt_chars = sum(
         len(m["content"])

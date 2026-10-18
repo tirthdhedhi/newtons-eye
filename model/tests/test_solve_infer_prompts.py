@@ -243,3 +243,17 @@ def test_schema_conversion_error_is_not_silently_dropped():
     with pytest.raises(InferError, match="cannot compile"):
         client(handler, constrained=True).complete(MSGS)
     assert len(seen) == 1
+
+
+def test_constrained_schema_accepts_a_scene_or_a_refusal():
+    import jsonschema
+
+    from parser_model.paths import constrained_schema
+
+    schema = constrained_schema()
+    validator = jsonschema.Draft202012Validator(schema)
+    assert validator.is_valid({"unsupported": "circular motion"})
+    gold = json.loads(paths.authoring_path("projectile").read_text())
+    assert validator.is_valid(gold)
+    assert not validator.is_valid({"unsupported": ""})
+    assert not validator.is_valid({"version": 1.1, "nonsense": True})

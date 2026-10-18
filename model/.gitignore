@@ -12,3 +12,5 @@ colab/bundle.zip
 data/ft2/
 data/ft3/
 data/ft4/
+exports/
+.venv-gguf/
