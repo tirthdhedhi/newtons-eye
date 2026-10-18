@@ -84,6 +84,9 @@ def query_signature(query: dict[str, Any], scene: dict[str, Any] | None = None) 
     body = query.get("body")
     conn = query.get("connection")
     ask = query.get("ask")
+    at = query.get("at")
+    if at is None and ask in ("acceleration", "velocity", "position", "force", "relative_velocity"):
+        at = 0  # the solver reads a missing time as t = 0
     above = query.get("above") or ("ground" if ask == "max_height" else None)
     return (
         ask,
@@ -91,7 +94,7 @@ def query_signature(query: dict[str, Any], scene: dict[str, Any] | None = None) 
         query.get("force"),
         conns.get(conn, conn),
         _canon(query.get("until")),
-        _canon(query.get("at")),
+        _canon(at),
         _si(query.get("from")),
         _si(query.get("to")),
         above,

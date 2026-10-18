@@ -120,3 +120,9 @@ def test_event_times_and_landing_queries_are_part_of_the_signature():
     assert query_signature(until_land) != query_signature(
         {"ask": "time", "body": "b", "until": {"event": "stop"}}
     )
+
+
+def test_missing_time_means_zero():
+    base = {"ask": "acceleration", "body": "b"}
+    assert query_signature(base) == query_signature({**base, "at": 0})
+    assert query_signature(base) != query_signature({**base, "at": 1})
