@@ -67,3 +67,45 @@ families (vertical force on a free body, force along a ramp).
   are still the best evidence; add them to `data/hard.jsonl`.
 * The hard set is only 15 items, all by one author.
 * Training used synthetic data only; no textbook text.
+
+
+## v3 (wider scope + refusals) and what it showed
+
+v3 adds: time of flight / max height / range / impact velocity, optional mass, constant-acceleration
+kinematics, spring release, questions with one friction coefficient, and a refusal path
+(`{"unsupported": reason}`) for questions the solver cannot do. Trained on 9,411 examples (12 families,
+about 14% refusals), validation loss 0.072.
+
+| test | v3 3B | v2 3B |
+| --- | --- | --- |
+| seed set (21) | 21 | 21 |
+| hard set (15) | 14 (refused one lift problem as "apparent motion") | 15 |
+| held-out generated (300, incl. refusals) | 297 | n/a (older families) |
+| paraphrases (300, in-scope only) | 287 | 292 |
+| **exam-style dev set: 30 questions written by the project owner** | **20** | not measured |
+
+The 30-question set is the hardest test so far: in-scope questions (10) with hand-verified gold scenes,
+and 20 that should be refused. v3 refused 16 of 20 correctly but got only 4 of 10 in-scope questions
+right. Failures: dropped queries (velocity, time of flight), invented queries (`restoring`, `motion`),
+a missing `until`, and a `position` key inside a surface. Unrefused: spring on an incline, speed at the
+natural length, minimum stretch to start sliding, banked road. That set is now a *development* set
+(the next round of data was written with its style in mind); a fresh batch is needed for a clean test.
+
+Inference experiments on that set, same v3 model:
+
+| setting | solver_match (30) | note |
+| --- | --- | --- |
+| greedy, MLX | 20 | |
+| greedy, Ollama GGUF (Q8_0, exported) | 20 | the export is faithful |
+| Ollama with a constrained-decoding grammar, scene or refusal | 20 | 10 in-scope questions wrongly refused |
+| Ollama with a scene-only grammar (in-scope 10 only) | 0 / 10 | schema-valid but queries get dropped |
+| self-consistency, greedy + 6 samples, keep valid, majority (`--vote 6`) | 22 | the remaining misses are systematic |
+
+So: grammar-constrained decoding is not used (it fights the fine-tuned token habits), and voting gives a
+small gain. The fix has to come from training data.
+
+## Export for local running
+
+`mlx_lm.fuse --dequantize` writes a standard HF model, `convert_hf_to_gguf.py` + `llama-quantize` make a
+GGUF, and `ollama create` imports it (Ollama 0.40's own safetensors import does not support Qwen2).
+The Modelfile bakes in the system prompt, so a client sends only `Problem: <question>\nJSON:`.
