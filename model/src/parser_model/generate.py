@@ -1,0 +1,1008 @@
+"""Synthetic training problems: question text + authoring scene + closed-form answers.
+
+Every problem is a template family with randomised, round-number parameters. The gold scene is the
+authoring JSON a person would write; the expected answers come from closed-form physics and are
+checked against the real solver (``verify``), so a template can only enter the dataset if the
+solver agrees with the textbook formula. Questions come in three styles (textbook, casual, terse),
+with varied wording (``phrasing``), units and distractor sentences. They never say what happens
+("it slides"), give every needed quantity, and ask for exactly the scene's queries. ``g`` is the
+solver's 9.81 and is never mentioned.
+
+Families: floor-push, incline, sliding-stop, projectile, free-fall, spring-block, lift, ramp.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import random
+import re
+import sys
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from .phrasing import (
+    BALL_WORDS,
+    BODY_WORDS,
+    angle_text,
+    assemble,
+    casual_ask,
+    distance,
+    fmt,
+    mass,
+    pick,
+    speed,
+    terse_ask,
+    textbook_ask,
+    when_options,
+)
+from .solve import solve_scene
+
+G = 9.81
+STYLES = ("textbook", "casual", "terse")
+
+
+@dataclass
+class Problem:
+    family: str
+    questions: dict[str, str]
+    scene: dict[str, Any]
+    expected: dict[str, Any]  # query id -> number | [x, y, z]
+    compare: dict[str, str]  # query id -> "norm" | "x" | "xy" | "value"
+
+
+def fix_articles(text: str) -> str:
+    """'a 8 kg' -> 'an 8 kg' (numbers read aloud with a vowel: 8, 80, 11, 18)."""
+    return re.sub(r"\b([Aa]) (?=(?:8[\d.]*|11|18)\b)", lambda m: m.group(1) + "n ", text)
+
+
+def pick_queries(rng: random.Random, names: list[str], low: int = 1) -> list[str]:
+    k = rng.randint(low, len(names))
+    chosen = rng.sample(names, k)
+    return [n for n in names if n in chosen]
+
+
+def friction_pair(rng: random.Random) -> tuple[float, float]:
+    mu_s = pick(rng, [0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+    mu_k = round(mu_s - pick(rng, [0.1, 0.1, 0.2]), 1)
+    return mu_s, max(mu_k, 0.1)
+
+
+def surface_friction(mu_s: float, mu_k: float) -> dict[str, Any]:
+    return {"static": mu_s, "kinetic": mu_k}
+
+
+def query(qid: str, ask: str, body: str, **extra: Any) -> dict[str, Any]:
+    return {"id": qid, "ask": ask, "body": body, **extra}
+
+
+def mu_phrase(rng: random.Random, mu_s: float, mu_k: float, style: str) -> str:
+    """How the friction coefficients are given (never reveals whether the body moves)."""
+    if mu_s == 0 and mu_k == 0:
+        return pick(rng, ["The surface is frictionless.", "There is no friction.", "It is smooth."])
+    s, k = fmt(mu_s), fmt(mu_k)
+    if style == "textbook":
+        return pick(
+            rng,
+            [
+                f"The coefficients of static and kinetic friction are {s} and {k}.",
+                f"The coefficient of static friction is {s} and that of kinetic friction is {k}.",
+                f"Take mu_s = {s} and mu_k = {k}.",
+                f"The static and kinetic friction coefficients are {s} and {k}, respectively.",
+            ],
+        )
+    return pick(
+        rng,
+        [
+            f"mu_s = {s} and mu_k = {k}.",
+            f"The friction coefficients are {s} (static) and {k} (kinetic).",
+            f"Static friction coefficient {s}, kinetic {k}.",
+        ],
+    )
+
+
+def finish(
+    rng: random.Random,
+    word: str,
+    givens: dict[str, list[str]],
+    terse: str,
+    asks: list[str],
+    when: str | None,
+    t: float | None,
+) -> dict[str, str]:
+    """The three styled questions from per-style givens and the (shared) ask phrases."""
+    return {
+        "textbook": assemble(rng, givens["textbook"], textbook_ask(rng, asks, when), word),
+        "casual": assemble(rng, givens["casual"], casual_ask(rng, asks, when), word),
+        "terse": f"{terse} {terse_ask(rng, asks, t)}",
+    }
+
+
+# --- floor push ---------------------------------------------------------------------------------
+
+FLOOR_BODY = ["block", "box", "crate", "sled", "cart", "trolley", "trunk", "package"]
+
+
+def floor_push(rng: random.Random) -> Problem:
+    m = pick(rng, [2, 3, 4, 5, 8, 10, 12, 15, 20, 25, 40])
+    mu_s, mu_k = (0.0, 0.0) if rng.random() < 0.12 else friction_pair(rng)
+    angle = 0 if rng.random() < 0.6 else pick(rng, [20, 30, 35, 37, 40, 45])
+    below = bool(angle) and rng.random() < 0.4
+    weight = m * G
+    f_push = round(weight * rng.uniform(0.15, 0.9) / 5) * 5 or 5
+    t = pick(rng, [1, 2, 3, 4, 5])
+    theta = -angle if below else angle
+    fx = f_push * math.cos(math.radians(theta))
+    n_force = weight - f_push * math.sin(math.radians(theta))
+    if mu_s > 0 and fx <= mu_s * n_force:
+        accel, friction = 0.0, fx
+    else:
+        friction = mu_k * n_force
+        accel = (fx - friction) / m
+    names = pick_queries(rng, ["a", "f", "N"])
+    word = pick(rng, FLOOR_BODY)
+    m_text, m_scene = mass(m, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [{"id": "block", "mass": m_scene}],
+        "surfaces": [{"id": "floor", "kind": "plane", "friction": surface_friction(mu_s, mu_k)}],
+        "contacts": [{"body": "block", "surface": "floor"}],
+        "forces": [
+            {
+                "id": "push",
+                "kind": "applied",
+                "body": "block",
+                "magnitude": f"{fmt(f_push)} N",
+                "directionAngle": f"{fmt(theta)} deg",
+                "relativeTo": "floor",
+            }
+        ],
+        "queries": [],
+    }
+    qmap = {"a": "acceleration", "f": "friction", "N": "normal"}
+    for n in names:
+        if n == "a":
+            scene["queries"].append(query("a", "acceleration", "block", at=t))
+        else:
+            scene["queries"].append(
+                {"id": n, "ask": "force", "force": qmap[n], "body": "block", "at": t}
+            )
+    answers = {"a": [accel, 0, 0], "f": friction, "N": n_force}
+    expected = {n: answers[n] for n in names}
+    compare = {"a": "norm", "f": "value", "N": "value"}
+    ask_words = {
+        "a": [
+            "the acceleration of the {w}",
+            "the acceleration of the {w}",
+            "how fast the {w} is accelerating",
+            "its acceleration",
+            "the {w}'s acceleration",
+        ],
+        "f": [
+            "the friction force on the {w}",
+            "the force of friction acting on it",
+            "the friction force",
+            "the magnitude of the friction force",
+        ],
+        "N": [
+            "the normal force on the {w}",
+            "the normal force the floor exerts on it",
+            "the normal force",
+            "the magnitude of the normal force",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "the push begins")
+    side = "below" if below else "above"
+    if angle:
+        push = pick(
+            rng,
+            [
+                f"a {fmt(f_push)} N force directed {angle_text(angle, rng)} {side} the horizontal",
+                f"a force of {fmt(f_push)} N pointing {angle_text(angle, rng)} {side} horizontal",
+            ],
+        )
+        terse_push = f"push {fmt(f_push)} N at {fmt(angle)} deg {side} horizontal"
+    else:
+        push = pick(
+            rng,
+            [
+                f"a horizontal force of {fmt(f_push)} N",
+                f"a {fmt(f_push)} N horizontal force",
+                f"a horizontal push of {fmt(f_push)} N",
+            ],
+        )
+        terse_push = f"push {fmt(f_push)} N horizontal"
+    givens = {
+        "textbook": [
+            pick(
+                rng,
+                [
+                    f"A {m_text} {word} rests on a horizontal floor.",
+                    f"A {m_text} {word} is at rest on a level floor.",
+                ],
+            ),
+            mu_phrase(rng, mu_s, mu_k, "textbook"),
+            f"The {word} is pushed with {push}.",
+        ],
+        "casual": [
+            f"I'm pushing a {m_text} {word} along the floor with {push}.",
+            mu_phrase(rng, mu_s, mu_k, "casual"),
+        ],
+    }
+    fric = "frictionless floor" if mu_s == 0 else f"mu_s {fmt(mu_s)} mu_k {fmt(mu_k)}"
+    terse = f"{m_text} {word}, {fric}, {terse_push}."
+    return Problem(
+        "floor-push", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- incline ------------------------------------------------------------------------------------
+
+
+def incline(rng: random.Random) -> Problem:
+    m = pick(rng, [1, 2, 3, 4, 5, 6, 8, 10, 15])
+    theta = pick(rng, [15, 20, 25, 30, 35, 37, 40, 45, 50, 53, 60])
+    length = pick(rng, [1.5, 2, 2.5, 3, 4, 5, 6])
+    frictionless = rng.random() < 0.25
+    if frictionless:
+        mu_s = mu_k = 0.0
+    else:
+        mu_s, mu_k = friction_pair(rng)
+        stick_mu = round(math.tan(math.radians(theta)) + pick(rng, [0.1, 0.2, 0.3]), 1)
+        if rng.random() < 0.4 and stick_mu <= 1.0:  # force the sticking case
+            mu_s, mu_k = stick_mu, max(round(stick_mu - 0.2, 1), 0.1)
+    t_ang = math.tan(math.radians(theta))
+    slides = t_ang > mu_s
+    cos, sin = math.cos(math.radians(theta)), math.sin(math.radians(theta))
+    n_force = m * G * cos
+    accel = G * (sin - mu_k * cos) if slides else 0.0
+    friction = mu_k * n_force if slides else m * G * sin
+    t_edge = math.sqrt(2 * length / accel) if slides and accel > 0 else None
+    # "time until edge" only exists inside the default simulation window (at least 2 s)
+    edge_ok = t_edge is not None and t_edge < 1.9
+    names = ["a", "f", "N"] + (["t_edge"] if edge_ok else []) + ([] if frictionless else ["mu_min"])
+    names = pick_queries(rng, names)
+    t = None
+    if any(n in names for n in ("a", "f", "N")):
+        limit = (t_edge * 0.9) if t_edge else 3.0
+        t = pick(rng, [x for x in (0, 0.5, 1, 1.5, 2) if x < limit] or [0])
+    word = pick(rng, BODY_WORDS)
+    m_text, m_scene = mass(m, rng)
+    len_text, len_scene = distance(length, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [{"id": "block", "mass": m_scene, "placement": {"on": "ramp", "at": "top"}}],
+        "surfaces": [
+            {
+                "id": "ramp",
+                "kind": "plane",
+                "angle": f"{fmt(theta)} deg",
+                "extent": {"length": len_scene},
+                "friction": surface_friction(mu_s, mu_k),
+            }
+        ],
+        "contacts": [{"body": "block", "surface": "ramp"}],
+        "queries": [],
+    }
+    expected: dict[str, Any] = {}
+    for n in names:
+        if n == "a":
+            scene["queries"].append(query("a", "acceleration", "block", at=t))
+            expected["a"] = [accel, 0, 0]
+        elif n == "f":
+            scene["queries"].append(
+                {"id": "f", "ask": "force", "force": "friction", "body": "block", "at": t}
+            )
+            expected["f"] = friction
+        elif n == "N":
+            scene["queries"].append(
+                {"id": "N", "ask": "force", "force": "normal", "body": "block", "at": t}
+            )
+            expected["N"] = n_force
+        elif n == "t_edge":
+            scene["queries"].append(
+                {"id": "t_edge", "ask": "time", "until": {"event": "edge"}, "body": "block"}
+            )
+            expected["t_edge"] = t_edge
+        else:
+            scene["queries"].append(query("mu_min", "min_mu_s", "block"))
+            expected["mu_min"] = t_ang
+    compare = {"a": "norm", "f": "value", "N": "value", "t_edge": "value", "mu_min": "value"}
+    ask_words = {
+        "a": [
+            "the acceleration of the {w}",
+            "the {w}'s acceleration",
+            "its acceleration",
+            "how fast the {w} accelerates",
+        ],
+        "f": [
+            "the friction force on the {w}",
+            "the force of friction acting on it",
+            "the friction force",
+            "the magnitude of the friction force",
+        ],
+        "N": [
+            "the normal force on the {w}",
+            "the normal force the incline exerts on it",
+            "the normal force",
+        ],
+        "t_edge": [
+            "how long the {w} takes to reach the bottom edge of the incline",
+            "how long it takes to reach the bottom edge",
+            "the time for it to reach the bottom edge",
+            "the time the {w} takes to get to the end of the incline",
+            "when it reaches the bottom of the incline",
+        ],
+        "mu_min": [
+            "the minimum coefficient of static friction needed to keep the {w} from sliding",
+            "the smallest mu_s that would keep it from sliding",
+            "the minimum static friction coefficient that stops it sliding",
+            "the least value of mu_s for which the {w} would not slide",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "release") if t is not None else None
+    ang = angle_text(theta, rng)
+    givens = {
+        "textbook": [
+            pick(
+                rng,
+                [
+                    f"A {m_text} {word} is released from rest at the top of an incline "
+                    f"{len_text} long that makes an angle of {ang} with the horizontal.",
+                    f"A {m_text} {word} starts from rest at the top of a rough incline of length "
+                    f"{len_text}, inclined at {ang} to the horizontal.",
+                    f"An incline {len_text} long is inclined at {ang}. A {m_text} {word} is "
+                    f"released from rest at its top.",
+                ],
+            ).replace("rough ", "" if frictionless else "rough "),
+            mu_phrase(rng, mu_s, mu_k, "textbook"),
+        ],
+        "casual": [
+            pick(
+                rng,
+                [
+                    f"There's a {m_text} {word} at the top of a {len_text} ramp tilted at {ang}, "
+                    f"and I let go of it.",
+                    f"I let a {m_text} {word} go from the top of a {len_text} long ramp that is "
+                    f"tilted {ang}.",
+                ],
+            ),
+            mu_phrase(rng, mu_s, mu_k, "casual"),
+        ],
+    }
+    fric = "frictionless" if frictionless else f"mu_s {fmt(mu_s)}, mu_k {fmt(mu_k)}"
+    terse = (
+        f"{m_text} {word}, top of {fmt(theta)} deg incline, length {len_text}, {fric}, "
+        f"released from rest."
+    )
+    return Problem(
+        "incline", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- sliding to a stop --------------------------------------------------------------------------
+
+
+def sliding_stop(rng: random.Random) -> Problem:
+    m = pick(rng, [1, 2, 3, 4, 5, 6, 8, 10])
+    v0 = pick(rng, [5, 10, 15, 20, 25, 4, 6, 8, 12])
+    mu_s, mu_k = friction_pair(rng)
+    t_stop = v0 / (mu_k * G)
+    dist = v0**2 / (2 * mu_k * G)
+    window = math.ceil(t_stop) + pick(rng, [1, 2, 3])
+    work = -0.5 * m * v0**2
+    names = pick_queries(rng, ["t_stop", "d", "W"])
+    long_stop = "t_stop" in names and t_stop >= 1.9
+    if ("d" in names or long_stop) and "W" not in names:  # a work window sets the duration
+        names.append("W")
+    word = pick(rng, BODY_WORDS)
+    m_text, m_scene = mass(m, rng)
+    v_text, v_scene = speed(v0, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [
+            {
+                "id": "block",
+                "mass": m_scene,
+                "velocity": {"speed": v_scene, "angle": "0 deg"},
+            }
+        ],
+        "surfaces": [{"id": "floor", "kind": "plane", "friction": surface_friction(mu_s, mu_k)}],
+        "contacts": [{"body": "block", "surface": "floor"}],
+        "queries": [],
+    }
+    expected = {}
+    for n in names:
+        if n == "t_stop":
+            scene["queries"].append(
+                {"id": "t_stop", "ask": "time", "until": {"event": "stop"}, "body": "block"}
+            )
+            expected[n] = t_stop
+        elif n == "d":
+            scene["queries"].append(query("d", "distance", "block"))
+            expected[n] = dist
+        else:
+            scene["queries"].append(query("W", "work", "block", **{"from": 0, "to": f"{window} s"}))
+            expected[n] = work
+    compare = {"t_stop": "value", "d": "value", "W": "value"}
+    ask_words = {
+        "t_stop": [
+            "the time at which the {w} comes to rest",
+            "when it comes to a stop",
+            "how long it takes to stop",
+            "the time it takes for the {w} to stop",
+        ],
+        "d": [
+            "the distance it travels before stopping",
+            "how far it travels",
+            "the distance the {w} covers",
+            "how far the {w} goes",
+        ],
+        "W": [
+            f"the total work done on the {{w}} between t = 0 and t = {window} s",
+            f"the work done on it from t = 0 to t = {window} s",
+            f"the net work done on the {{w}} from t = 0 to t = {window} s",
+            f"the work done on it over the first {window} s",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    givens = {
+        "textbook": [
+            pick(
+                rng,
+                [
+                    f"A {m_text} {word} moves with an initial speed of {v_text} along a "
+                    f"horizontal floor.",
+                    f"A {m_text} {word} is given an initial velocity of {v_text} along a "
+                    f"level floor.",
+                    f"A {m_text} {word} travels along a horizontal surface at {v_text}.",
+                ],
+            ),
+            mu_phrase(rng, mu_s, mu_k, "textbook"),
+        ],
+        "casual": [
+            pick(
+                rng,
+                [
+                    f"A {m_text} {word} is sliding along the floor at {v_text}.",
+                    f"I shove a {m_text} {word} along the floor and it leaves my hand at {v_text}.",
+                ],
+            ),
+            mu_phrase(rng, mu_s, mu_k, "casual"),
+        ],
+    }
+    terse = f"{m_text} {word} moving at {v_text} on a floor, mu_s {fmt(mu_s)} mu_k {fmt(mu_k)}."
+    return Problem(
+        "sliding-stop",
+        finish(rng, word, givens, terse, asks, None, None),
+        scene,
+        expected,
+        compare,
+    )
+
+
+# --- projectile ---------------------------------------------------------------------------------
+
+
+def projectile(rng: random.Random) -> Problem:
+    m = pick(rng, [0.1, 0.2, 0.5, 1, 2, 3])
+    sp = pick(rng, [8, 10, 12, 15, 20, 25, 30])
+    angle = pick(rng, [0, 15, 30, 37, 45, 53, 60, 75])
+    h = 0 if rng.random() < 0.6 else pick(rng, [5, 10, 20, 45, 80])
+    if h and angle > 45:
+        angle = pick(rng, [0, 0, 30])
+    components = angle != 0 and rng.random() < 0.4
+    vx, vy = sp * math.cos(math.radians(angle)), sp * math.sin(math.radians(angle))
+    if components:  # whole-number components, e.g. 6 and 8, or 10 and 10
+        vx, vy = pick(
+            rng, [(6, 8), (8, 6), (10, 10), (12, 5), (5, 12), (9, 12), (15, 20), (20, 15)]
+        )
+    t = pick(rng, [0.5, 1, 1.5, 2, 2.5, 3])
+    if h:
+        t = min(t, math.floor(math.sqrt(2 * h / G) * 2) / 2 or 0.5)
+    names = pick_queries(rng, ["p", "v"])
+    word = pick(rng, BALL_WORDS)
+    m_text, m_scene = mass(m, rng)
+    sp_text, sp_scene = speed(sp, rng)
+    body: dict[str, Any] = {"id": "ball", "mass": m_scene}
+    if components:
+        body["velocity"] = [vx, vy, 0]
+    else:
+        body["velocity"] = {"speed": sp_scene, "angle": f"{fmt(angle)} deg"}
+    if h:
+        body["position"] = [0, h, 0]
+    scene: dict[str, Any] = {"version": 1.1, "bodies": [body], "queries": []}
+    for n in names:
+        scene["queries"].append(query(n, "position" if n == "p" else "velocity", "ball", at=t))
+    expected = {
+        "p": [vx * t, h + vy * t - 0.5 * G * t * t, 0],
+        "v": [vx, vy - G * t, 0],
+    }
+    expected = {n: expected[n] for n in names}
+    compare = {"p": "xy", "v": "xy"}
+    ask_words = {
+        "p": [
+            "the position of the {w}",
+            "where the {w} is (its position)",
+            "its position",
+            "the coordinates of the {w}",
+        ],
+        "v": [
+            "the velocity of the {w}",
+            "its velocity",
+            "the velocity of the {w}, with direction",
+            "how fast and in what direction it moves (its velocity)",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "launch")
+    start = f"from a height of {fmt(h)} m" if h else "from the origin"
+    if components:
+        launch = pick(
+            rng,
+            [
+                f"with a horizontal velocity component of {fmt(vx)} m/s and a vertical "
+                f"component of {fmt(vy)} m/s upward",
+                f"so that it initially moves {fmt(vx)} m/s horizontally and {fmt(vy)} m/s up",
+                f"with vx = {fmt(vx)} m/s and vy = {fmt(vy)} m/s",
+            ],
+        )
+        terse_launch = f"vx = {fmt(vx)} m/s, vy = {fmt(vy)} m/s up"
+    elif angle == 0:
+        launch = pick(rng, [f"horizontally at {sp_text}", f"horizontally with speed {sp_text}"])
+        terse_launch = f"launched horizontally at {sp_text}"
+    else:
+        launch = pick(
+            rng,
+            [
+                f"at {sp_text} and {angle_text(angle, rng)} above the horizontal",
+                f"with speed {sp_text} at {angle_text(angle, rng)} above the horizontal",
+            ],
+        )
+        terse_launch = f"launched at {sp_text}, {fmt(angle)} deg above horizontal"
+    givens = {
+        "textbook": [
+            f"A {m_text} {word} is launched {launch} {start}.",
+            pick(rng, ["Neglect air resistance.", "Ignore air resistance.", "There is no drag."]),
+        ],
+        "casual": [
+            f"I throw a {m_text} {word} {launch} {start}.",
+            pick(rng, ["No air resistance.", "Ignore drag.", "Assume there's no air resistance."]),
+        ],
+    }
+    terse = f"{m_text} {word}, {terse_launch}, {start}, no drag."
+    return Problem(
+        "projectile", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- free fall ----------------------------------------------------------------------------------
+
+
+def free_fall(rng: random.Random) -> Problem:
+    m = pick(rng, [0.2, 0.5, 1, 2, 5])
+    h = pick(rng, [10, 20, 30, 45, 80, 100])
+    v_up = pick(rng, [0, 0, 5, 8, 10, 15])
+    t = pick(rng, [0.5, 1, 1.5, 2, 2.5, 3])
+    t_hit = (v_up + math.sqrt(v_up**2 + 2 * G * h)) / G
+    t = min(t, math.floor(t_hit * 2) / 2 or 0.5)
+    names = pick_queries(rng, ["y", "v"])
+    word = pick(rng, BALL_WORDS)
+    m_text, m_scene = mass(m, rng)
+    body: dict[str, Any] = {"id": "ball", "mass": m_scene, "position": [0, h, 0]}
+    if v_up:
+        body["velocity"] = {"speed": f"{fmt(v_up)} m/s", "angle": "90 deg"}
+    scene: dict[str, Any] = {"version": 1.1, "bodies": [body], "queries": []}
+    for n in names:
+        scene["queries"].append(query(n, "position" if n == "y" else "velocity", "ball", at=t))
+    expected = {"y": [0, h + v_up * t - 0.5 * G * t * t, 0], "v": [0, v_up - G * t, 0]}
+    expected = {n: expected[n] for n in names}
+    compare = {"y": "xy", "v": "xy"}
+    ask_words = {
+        "y": [
+            "its height above the ground",
+            "how high it is above the ground",
+            "its position",
+            "the height of the {w}",
+        ],
+        "v": ["its velocity", "its velocity (with sign)", "the velocity of the {w}"],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "release" if not v_up else "it is thrown")
+    if not v_up:
+        start = pick(
+            rng,
+            [f"dropped from rest from a height of {fmt(h)} m", f"released from rest {fmt(h)} m up"],
+        )
+    else:
+        start = pick(
+            rng,
+            [
+                f"thrown straight up at {fmt(v_up)} m/s from a height of {fmt(h)} m",
+                f"thrown vertically upward at {fmt(v_up)} m/s from {fmt(h)} m above the ground",
+            ],
+        )
+    givens = {
+        "textbook": [
+            f"A {m_text} {word} is {start}.",
+            "Neglect air resistance. Take up as positive.",
+        ],
+        "casual": [f"A {m_text} {word} gets {start}.", "No air resistance. Up is positive."],
+    }
+    terse = f"{m_text} {word}, {start}, no drag, up positive."
+    return Problem(
+        "free-fall", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- spring block -------------------------------------------------------------------------------
+
+
+def spring_block(rng: random.Random) -> Problem:
+    m = pick(rng, [0.5, 1, 2, 4, 5, 8])
+    k = pick(rng, [20, 50, 100, 200, 400])
+    amp = pick(rng, [0.1, 0.2, 0.25, 0.3, 0.5])
+    t = pick(rng, [0.5, 1, 2, 3, 5])
+    w = math.sqrt(k / m)
+    names = pick_queries(rng, ["x", "v"])
+    word = pick(rng, BODY_WORDS)
+    m_text, m_scene = mass(m, rng)
+    amp_text, amp_scene = distance(amp, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [{"id": "block", "mass": m_scene, "placement": {"on": "floor", "offset": 0}}],
+        "surfaces": [{"id": "floor", "kind": "plane"}],
+        "contacts": [{"body": "block", "surface": "floor"}],
+        "forces": [
+            {
+                "id": "spring",
+                "kind": "spring",
+                "body": "block",
+                "anchor": {"fixed": True, "stretch": amp_scene},
+                "k": f"{fmt(k)} N/m",
+                "restLength": 0,
+            }
+        ],
+        "queries": [],
+    }
+    for n in names:
+        scene["queries"].append(query(n, "position" if n == "x" else "velocity", "block", at=t))
+    expected = {"x": [amp * math.cos(w * t), 0, 0], "v": [-amp * w * math.sin(w * t), 0, 0]}
+    expected = {n: expected[n] for n in names}
+    compare = {"x": "x", "v": "x"}
+    ask_words = {
+        "x": [
+            "the position of the {w}",
+            "where the {w} is, measured from the equilibrium position",
+            "its position",
+            "the displacement of the {w} from equilibrium",
+        ],
+        "v": [
+            "the velocity of the {w}",
+            "how fast it is moving (its velocity)",
+            "its velocity",
+            "the {w}'s velocity",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "release")
+    givens = {
+        "textbook": [
+            pick(
+                rng,
+                [
+                    f"A {m_text} {word} rests on a frictionless horizontal floor and is attached "
+                    f"to a fixed wall by a spring of spring constant {fmt(k)} N/m.",
+                    f"A {m_text} {word} on a smooth horizontal floor is connected to a wall by a "
+                    f"spring with force constant {fmt(k)} N/m.",
+                ],
+            ),
+            f"The spring is stretched {amp_text} from its natural length and the {word} is "
+            f"released from rest.",
+        ],
+        "casual": [
+            f"A {m_text} {word} sits on a frictionless floor, hooked to a wall with a "
+            f"{fmt(k)} N/m spring.",
+            f"I pull it out so the spring is stretched {amp_text}, then let go.",
+        ],
+    }
+    terse = (
+        f"{m_text} {word}, frictionless floor, spring k = {fmt(k)} N/m fixed to wall, "
+        f"stretched {amp_text} then released from rest."
+    )
+    return Problem(
+        "spring-block", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- lifted by a vertical force -----------------------------------------------------------------
+
+
+def lift(rng: random.Random) -> Problem:
+    m = pick(rng, [0.5, 1, 2, 3, 5, 8, 10, 20, 50])
+    weight = m * G
+    f_up = max(round(weight * rng.uniform(0.4, 2.2)), 1)
+    t = pick(rng, [0, 1, 2, 3, 4, 5])
+    a_y = f_up / m - G
+    names = pick_queries(rng, ["a", "v", "y"] if t else ["a"])
+    word = pick(rng, BODY_WORDS + BALL_WORDS)
+    m_text, m_scene = mass(m, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [{"id": "body", "mass": m_scene}],
+        "forces": [{"id": "pull", "kind": "applied", "body": "body", "vector": [0, f_up, 0]}],
+        "queries": [],
+    }
+    ask_names = {"a": "acceleration", "v": "velocity", "y": "position"}
+    for n in names:
+        scene["queries"].append(query(n, ask_names[n], "body", at=t))
+    expected = {
+        "a": [0, a_y, 0],
+        "v": [0, a_y * t, 0],
+        "y": [0, 0.5 * a_y * t * t, 0],
+    }
+    expected = {n: expected[n] for n in names}
+    compare = {"a": "xy", "v": "xy", "y": "xy"}
+    ask_words = {
+        "a": ["the acceleration of the {w}", "its acceleration", "the {w}'s acceleration"],
+        "v": ["its velocity", "the velocity of the {w}", "its velocity (up is positive)"],
+        "y": [
+            "how far it has moved from its starting point (its position)",
+            "its position relative to where it started",
+            "its displacement",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = when_options(rng, t, "it starts moving")
+    force = pick(
+        rng,
+        [
+            f"a constant upward force of {fmt(f_up)} N",
+            f"a steady vertical force of {fmt(f_up)} N directed upward",
+            f"a {fmt(f_up)} N force pointing straight up",
+        ],
+    )
+    givens = {
+        "textbook": [
+            f"A {m_text} {word}, initially at rest, is pushed straight upward by {force}.",
+            "Take the starting point as the origin and up as positive.",
+        ],
+        "casual": [f"I lift a {m_text} {word} from rest with {force}. Up is positive."],
+    }
+    terse = f"{m_text} {word} from rest, {force}, up positive."
+    return Problem(
+        "lift", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+# --- ramp, optionally pushed along the slope ----------------------------------------------------
+
+
+def ramp(rng: random.Random) -> Problem:
+    m = pick(rng, [1, 2, 3, 4, 5, 8, 10, 20, 50, 100, 250])
+    theta = pick(rng, [10, 15, 17, 20, 25, 30, 37, 40, 45, 53])
+    smooth = rng.random() < 0.35
+    mu_s, mu_k = (0.0, 0.0) if smooth else friction_pair(rng)
+    cos, sin = math.cos(math.radians(theta)), math.sin(math.radians(theta))
+    n_force = m * G * cos
+    pushed = rng.random() < 0.75
+    f_push = 0.0
+    if pushed:
+        f_push = max(round(m * G * sin * rng.uniform(0.2, 2.0) / 5) * 5, 5)
+    net = f_push - m * G * sin  # along the slope, up positive, before friction
+    if abs(net) <= mu_s * n_force:
+        accel, friction = 0.0, abs(net)
+    else:
+        friction = mu_k * n_force
+        accel = (abs(net) - friction) / m
+    t = pick(rng, [0, 0, 1, 2])
+    names = pick_queries(rng, ["a", "f", "N"])
+    if smooth and "f" in names:
+        names.remove("f")
+        names = names or ["a"]
+    word = pick(rng, BODY_WORDS)
+    m_text, m_scene = mass(m, rng)
+    scene: dict[str, Any] = {
+        "version": 1.1,
+        "bodies": [{"id": "block", "mass": m_scene}],
+        "surfaces": [
+            {
+                "id": "ramp",
+                "kind": "plane",
+                "angle": f"{fmt(theta)} deg",
+                "friction": surface_friction(mu_s, mu_k),
+            }
+        ],
+        "contacts": [{"body": "block", "surface": "ramp"}],
+        "queries": [],
+    }
+    if pushed:
+        scene["forces"] = [
+            {
+                "id": "push",
+                "kind": "applied",
+                "body": "block",
+                "magnitude": f"{fmt(f_push)} N",
+                "directionAngle": "0 deg",
+                "relativeTo": "ramp",
+            }
+        ]
+    qmap = {"f": "friction", "N": "normal"}
+    for n in names:
+        if n == "a":
+            scene["queries"].append(query("a", "acceleration", "block", at=t))
+        else:
+            scene["queries"].append(
+                {"id": n, "ask": "force", "force": qmap[n], "body": "block", "at": t}
+            )
+    answers = {"a": [accel, 0, 0], "f": friction, "N": n_force}
+    expected = {n: answers[n] for n in names}
+    compare = {"a": "norm", "f": "value", "N": "value"}
+    ask_words = {
+        "a": ["the acceleration of the {w}", "its acceleration", "the {w}'s acceleration"],
+        "f": ["the friction force on the {w}", "the friction force acting on it"],
+        "N": [
+            "the normal force on the {w}",
+            "the force the ramp exerts on the {w} (the normal force)",
+            "the normal force",
+        ],
+    }
+    asks = [pick(rng, ask_words[n]).format(w=word) for n in names]
+    when = (
+        when_options(rng, t, "release")
+        if t
+        else pick(rng, ["at the start", "at the instant it is released", "at t = 0"])
+    )
+    ang = angle_text(theta, rng)
+    surface = "smooth (frictionless)" if smooth else "rough"
+    push = (
+        pick(
+            rng,
+            [
+                f"A force of {fmt(f_push)} N acts on it, parallel to the ramp and up the slope.",
+                f"It is pushed up the slope by a {fmt(f_push)} N force parallel to the ramp.",
+            ],
+        )
+        if pushed
+        else "Nothing else acts on it."
+    )
+    givens = {
+        "textbook": [
+            f"A {m_text} {word} is placed at rest on a {surface} ramp that makes an angle of "
+            f"{ang} with the horizontal.",
+            *([] if smooth else [mu_phrase(rng, mu_s, mu_k, "textbook")]),
+            push,
+        ],
+        "casual": [
+            f"A {m_text} {word} sits on a {surface} ramp tilted at {ang}.",
+            *([] if smooth else [mu_phrase(rng, mu_s, mu_k, "casual")]),
+            push,
+        ],
+    }
+    fric = "smooth" if smooth else f"mu_s {fmt(mu_s)}, mu_k {fmt(mu_k)}"
+    tpush = f"push {fmt(f_push)} N up the slope" if pushed else "no other force"
+    terse = f"{m_text} {word} at rest on {fmt(theta)} deg ramp, {fric}, {tpush}."
+    return Problem(
+        "ramp", finish(rng, word, givens, terse, asks, when, t), scene, expected, compare
+    )
+
+
+FAMILIES: dict[str, Callable[[random.Random], Problem]] = {
+    "floor-push": floor_push,
+    "incline": incline,
+    "sliding-stop": sliding_stop,
+    "projectile": projectile,
+    "free-fall": free_fall,
+    "spring-block": spring_block,
+    "lift": lift,
+    "ramp": ramp,
+}
+WEIGHTS = {
+    "floor-push": 3,
+    "incline": 4,
+    "sliding-stop": 2,
+    "projectile": 3,
+    "free-fall": 2,
+    "spring-block": 2,
+    "lift": 2,
+    "ramp": 3,
+}
+
+
+# --- verification and dataset -------------------------------------------------------------------
+
+
+def _component(kind: str, value: Any) -> Any:
+    if kind == "norm":
+        return math.hypot(*value)
+    if kind == "x":
+        return value[0]
+    if kind == "xy":
+        return value[:2]
+    return value
+
+
+def verify(problem: Problem, rel: float = 1e-3) -> list[str]:
+    """Problems where the real solver disagrees with the closed-form answer (empty = fine)."""
+    solved = solve_scene(problem.scene)
+    if not solved.ok or solved.answers is None:
+        return [f"solver exit {solved.exit_code}: {(solved.issues or solved.errors or ['?'])[0]}"]
+    bad = []
+    for qid, want in problem.expected.items():
+        got = solved.answers.get(qid)
+        kind = problem.compare[qid]
+        if got is None:
+            bad.append(f"{qid}: no answer")
+            continue
+        a, b = _component(kind, got), _component(kind, want)
+        pairs = zip(a, b, strict=True) if isinstance(a, list) else [(a, b)]
+        for x, y in pairs:
+            if not math.isclose(x, y, rel_tol=rel, abs_tol=1e-6):
+                bad.append(f"{qid}: solver {got} vs formula {want}")
+                break
+    return bad
+
+
+def make_problems(n: int, seed: int) -> list[tuple[str, Problem]]:
+    rng = random.Random(seed)
+    names = [f for f, w in WEIGHTS.items() for _ in range(w)]
+    seen: set[str] = set()
+    out = []
+    counters: dict[str, int] = {}
+    while len(out) < n:
+        family = pick(rng, names)
+        problem = FAMILIES[family](rng)
+        key = json.dumps(problem.scene, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        counters[family] = counters.get(family, 0) + 1
+        out.append((f"syn-{family}-{counters[family]:04d}", problem))
+    return out
+
+
+def build(n: int, seed: int, out_path: Path, workers: int = 4) -> dict[str, Any]:
+    problems = make_problems(n, seed)
+    with ThreadPoolExecutor(workers) as pool:
+        verdicts = list(pool.map(lambda item: verify(item[1]), problems))
+    kept, dropped = 0, []
+    with out_path.open("w") as fh:
+        for (pid, problem), bad in zip(problems, verdicts, strict=True):
+            if bad:
+                dropped.append((pid, bad[0]))
+                continue
+            for style in STYLES:
+                record = {
+                    "id": f"{pid}/{style}",
+                    "parent": pid,
+                    "family": problem.family,
+                    "style": style,
+                    "source": "synthetic",
+                    "question": fix_articles(problem.questions[style]),
+                    "scene": problem.scene,
+                    "expected": problem.expected,
+                }
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            kept += 1
+    return {"requested": n, "kept": kept, "dropped": dropped}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    n = int(args[0]) if args else 50
+    out = Path(args[1] if len(args) > 1 else "data/synthetic.jsonl")
+    seed = int(args[2]) if len(args) > 2 else 0
+    report = build(n, seed, out)
+    print(f"kept {report['kept']}/{report['requested']} problems -> {out}")
+    for pid, why in report["dropped"][:20]:
+        print(f"  dropped {pid}: {why[:150]}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
