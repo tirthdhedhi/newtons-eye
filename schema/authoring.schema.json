@@ -1484,6 +1484,7 @@
                     "enum": [
                       "stop",
                       "edge",
+                      "land",
                       "slack",
                       "slide_start"
                     ]
@@ -1536,6 +1537,59 @@
                   "number",
                   "string"
                 ]
+              }
+            },
+            "required": [
+              "id",
+              "ask",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ask": {
+                "type": "string",
+                "const": "max_height"
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              },
+              "above": {
+                "type": "string",
+                "enum": [
+                  "ground",
+                  "start"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "ask",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ask": {
+                "type": "string",
+                "const": "range"
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
               }
             },
             "required": [

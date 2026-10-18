@@ -187,11 +187,15 @@ export function validateScene(scene: Scene): { errors: Issue[]; warnings: Issue[
       const ev = q.until.event;
       if (ev === "edge" && !hasEdge)
         err(`${p}.until`, 'no surface has an "extent", so no edge can be reached');
+      if (ev === "land" && scene.contacts.length === 0)
+        err(`${p}.until`, "no body has a surface contact, so nothing can land");
       if (ev === "slack" && scene.connections.length === 0)
         err(`${p}.until`, "no connection can go slack");
       if (ev === "slide_start" && !hasFriction)
         err(`${p}.until`, "no surface has static friction, so sliding cannot start");
     }
+    if ((q.ask === "range" || q.ask === "max_height") && scene.contacts.length === 0)
+      err(p, `a ${q.ask} query needs a surface contact (the ground) for the body`);
     if (q.ask === "force" && q.force === "tension" && !q.connection) {
       err(`${p}.connection`, "a tension query needs a connection id");
     }

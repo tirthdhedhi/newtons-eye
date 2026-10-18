@@ -159,7 +159,7 @@ export const Query = z.union([
   z.strictObject({
     id: Id,
     ask: z.literal("time"),
-    until: z.strictObject({ event: z.enum(["stop", "edge", "slack", "slide_start"]) }),
+    until: z.strictObject({ event: z.enum(["stop", "edge", "land", "slack", "slide_start"]) }),
     body: Id.optional(),
   }),
   z.strictObject({
@@ -168,6 +168,20 @@ export const Query = z.union([
     body: Id,
     from: Time.optional(),
     to: Time.optional(),
+  }),
+  z.strictObject({
+    id: Id,
+    /** Highest point reached before landing (or the end of the simulation). */
+    ask: z.literal("max_height"),
+    body: Id,
+    /** `ground`: height above the body's contact surface. `start`: above the starting position. */
+    above: z.enum(["ground", "start"]).optional(),
+  }),
+  z.strictObject({
+    id: Id,
+    /** Horizontal distance from the starting position to where the body lands. */
+    ask: z.literal("range"),
+    body: Id,
   }),
   z.strictObject({
     id: Id,

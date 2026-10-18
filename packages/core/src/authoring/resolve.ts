@@ -11,6 +11,11 @@ import type { AuthoringBody, AuthoringScene } from "./schema";
 export const DEFAULT_SHAPE = { kind: "box", size: [0.4, 0.2, 0.4] } as const;
 /** Shortest simulation an authoring scene gets when it gives no `duration`. */
 export const MIN_DURATION = 2;
+/**
+ * Simulation length when a query depends on an event (a time until stop/edge/land, a range, a
+ * maximum height, or a distance with no window): the event has to be able to happen.
+ */
+export const EVENT_DURATION = 60;
 /** Extra simulated time after the last time any query refers to. */
 export const DURATION_MARGIN = 1;
 
@@ -302,11 +307,27 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
       if ("from" in q) see(q.from);
       if ("to" in q) see(q.to);
     }
-    duration = Math.max(MIN_DURATION, latest + DURATION_MARGIN);
-    note(
-      "duration",
-      `no duration given: simulating ${fmt(duration)} s (last query time ${fmt(latest)} s + ${DURATION_MARGIN} s, at least ${MIN_DURATION} s)`,
+    const eventDriven = a.queries.some(
+      (q) =>
+        q.ask === "time" ||
+        q.ask === "range" ||
+        q.ask === "max_height" ||
+        (q.ask === "distance" && q.to === undefined) ||
+        ("at" in q && q.at !== undefined && typeof q.at === "object" && !eventAt.has(q.at.event)),
     );
+    duration = Math.max(MIN_DURATION, latest + DURATION_MARGIN);
+    if (eventDriven && duration < EVENT_DURATION) {
+      duration = EVENT_DURATION;
+      note(
+        "duration",
+        `no duration given: simulating ${fmt(duration)} s because a query waits for an event (time until, range, max height, or an open-ended distance)`,
+      );
+    } else {
+      note(
+        "duration",
+        `no duration given: simulating ${fmt(duration)} s (last query time ${fmt(latest)} s + ${DURATION_MARGIN} s, at least ${MIN_DURATION} s)`,
+      );
+    }
   }
 
   if (errors.length > 0) return { ok: false, errors, warnings };

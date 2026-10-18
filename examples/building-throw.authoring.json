@@ -1,0 +1,53 @@
+{
+  "version": 1.1,
+  "title": "Ball thrown straight up at 15 m/s from a 45 m building: maximum height above the ground, time to reach the ground, impact velocity",
+  "bodies": [
+    {
+      "id": "ball",
+      "mass": "1 kg",
+      "shape": {
+        "kind": "point"
+      },
+      "position": [0, 45, 0],
+      "velocity": {
+        "speed": "15 m/s",
+        "angle": "90 deg"
+      }
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "ground",
+      "kind": "plane"
+    }
+  ],
+  "contacts": [
+    {
+      "body": "ball",
+      "surface": "ground"
+    }
+  ],
+  "queries": [
+    {
+      "id": "H",
+      "ask": "max_height",
+      "body": "ball"
+    },
+    {
+      "id": "T",
+      "ask": "time",
+      "until": {
+        "event": "land"
+      },
+      "body": "ball"
+    },
+    {
+      "id": "v",
+      "ask": "velocity",
+      "body": "ball",
+      "at": {
+        "event": "land"
+      }
+    }
+  ]
+}

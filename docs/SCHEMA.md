@@ -14,7 +14,14 @@ Source of truth: `packages/core/src/schema`. Scene JSON holds only givens.
 - Connections: `string` and `pulley_string` (ideal pulley; `endA`/`endB` are where the string leaves it).
 - Events: `release` (a body is held until then), `cut_string`, `set_force`.
 - Queries: acceleration, velocity, position, force (normal, friction, tension, net), time (until stop, edge,
-  slack, slide_start), distance, work, min_mu_s, relative_velocity.
+  land, slack, slide_start), distance, work, min_mu_s, relative_velocity, max_height, range.
+  - `time` `until: { event: "land" }`: when the body's lowest point reaches the plane it is in `contacts` with
+    (time of flight). `velocity`/`position`/`acceleration` with `at: { event: "land" }` read the instant _before_
+    the impact. Give a projectile `"shape": { "kind": "point" }` so it lands when its centre reaches the plane
+    (the default authoring box lands 0.1 m early).
+  - `max_height`: highest point before landing (or the end of the simulation). `above: "ground"` (default) is
+    the height above the body's contact plane, `above: "start"` the height above the starting position.
+  - `range`: horizontal distance from the starting position to the landing point. Errors if the body never lands.
 - Keys the solver computes (`normal`, `tension`, `acceleration`, `answer`, ...) are rejected anywhere in the JSON.
 - `parseScene(json)` returns the SI scene or a list of `{ path, message }` issues, plus warnings.
 - `examples/<name>.scene.json` pairs with `<name>.expected.json` (hand-computed values per query id).
@@ -36,7 +43,10 @@ Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes 
   level with the connected body resting on it). If omitted it is inferred the same way from a connected body's contact.
 - `surfaces[].point` optional (origin). `spring.anchor` may be `{ fixed: true, stretch: <distance> }`: the anchor is
   fixed so the spring is at natural length at the body's placement, and the body starts displaced by `stretch`.
-- `duration` optional: the latest time any query references (events included) + 1 s, at least 2 s.
+- `duration` optional: the latest time any query references (events included) + 1 s, at least 2 s. If a query
+  waits for an event (a `time` until, `range`, `max_height`, or a `distance` with no `to`) the default is 60 s,
+  so "when does it stop", "how far does it go" and "time of flight" need no window.
+- A body that touches a plane while moving away from it (a launch) leaves the plane; it is not held on it.
 - Every default or inference is returned in `parseScene(...).warnings`.
 
 `pnpm solve <file>` accepts either form and prints `{ queryId: value }`; on a validation failure it prints the issues
