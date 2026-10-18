@@ -75,7 +75,7 @@ _WORDS = {
 _UNIT_ALT = "|".join(re.escape(u) for u in sorted(_UNITS, key=len, reverse=True))
 _TAIL = r"(?![A-Za-z0-9_^²/])"
 _NUM_RE = re.compile(_NUM)
-_QTY_RE = re.compile(rf"(?P<num>{_NUM})\s*(?P<unit>{_UNIT_ALT}){_TAIL}", re.IGNORECASE)
+_QTY_RE = re.compile(rf"(?P<num>{_NUM})[\s-]*(?P<unit>{_UNIT_ALT}){_TAIL}", re.IGNORECASE)
 _WORD_RE = re.compile(
     rf"\b(?P<num>{'|'.join(sorted(map(re.escape, _WORDS), key=len, reverse=True))})\s+"
     rf"(?P<unit>{_UNIT_ALT}){_TAIL}",
@@ -110,8 +110,17 @@ def parse_quantity_string(text: str) -> tuple[float, str] | None:
     return _float(m.group("num")) * factor, dim
 
 
+def clean_markup(text: str) -> str:
+    """Undo LaTeX the paraphrased questions use: ``20^\\circ``, ``\\text{kg}``, ``\\(...\\)``."""
+    text = re.sub(r"\^\s*\{?\\circ\}?", "°", text)
+    text = re.sub(r"\\(?:text|mathrm)\{([^}]*)\}", r"\1", text)
+    text = re.sub(r"\\[,;: ]|\\[()\[\]]|\$", " ", text)
+    return text.replace("\\mu", "mu")
+
+
 def extract_quantities(question: str) -> list[Quantity]:
     """Numbers with units (converted to SI) and bare numbers found in the question."""
+    question = clean_markup(question)
     found: list[Quantity] = []
     taken: list[tuple[int, int]] = []
 

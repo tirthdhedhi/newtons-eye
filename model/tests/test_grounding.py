@@ -124,3 +124,16 @@ def test_every_gold_authoring_scene_is_grounded_in_every_phrasing():
         assert result.grounded, (item["id"], result.ungrounded)
         checked += 1
     assert checked == 21
+
+
+def test_hyphenated_and_latex_units():
+    q = si(
+        "a 20-degree incline, a 250-kg safe, \\( t = 2 \\) s, 30^\\circ above, "
+        "\\(5\\,\\text{m/s}\\)"
+    )
+    assert q["20-degree"] == pytest.approx(math.radians(20))
+    assert q["250-kg"] == 250
+    assert any(v == pytest.approx(math.radians(30)) for v in q.values())
+    assert any(v == 5 for v in q.values())
+    assert check_grounding("a 20-degree incline", {"angle": "20 deg"}).grounded
+    assert check_grounding("a 20-degree incline", {"angle": 0.3490658503988659}).grounded
