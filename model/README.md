@@ -203,3 +203,27 @@ PYTHONPATH=src .venv-train/bin/python generate_mlx.py --base "$BASE7" --adapter 
 
 Speed on an M-series Mac with 16 GB: about 135 tokens/s, so roughly 10 s per iteration at batch 4.
 Do not run generation while training: both want the GPU memory.
+
+
+## v3: wider scope, and refusing what the solver cannot do
+
+The solver gained (TypeScript, `packages/core`, see `docs/SCHEMA.md`): `time until land` (time of flight),
+`max_height` (above the ground or the start), `range`, launches that leave the surface, an event-driven
+default window of 60 s (so "when does it stop" and "how far does it go" need no window), an optional
+`mass` (default 1 kg) and `constantAcceleration` (kinematics with no force and no mass). The generator
+gained the matching families: `flight`, `spring-release` (initial net force and acceleration), `kinematics`,
+questions that give only one friction coefficient (the scene uses it for both), and `unsupported`.
+
+`unsupported` is a refusal path. For questions that cannot be written as a scene (vectors, relative
+motion, pulleys, connected bodies, apparent weight, spring combinations, static spring extension,
+circular motion, calculus-defined motion, inverse problems, energy methods, momentum, rotation, and
+non-mechanics questions) the target output is `{"unsupported": "<reason>"}`. The metrics count a correct
+refusal as a pass and a refusal of an in-scope question as a failure (`refused_in_scope`).
+
+```bash
+.venv/bin/python -m parser_model.dataset --problems 4500 --seed 2 --out data/ft3
+mkdir -p data/ft3/mlx && cp data/ft3/train.jsonl data/ft3/mlx/ && cp data/ft3/val.jsonl data/ft3/mlx/valid.jsonl
+.venv-train/bin/python -m mlx_lm.lora --model "$BASE3" --train --data data/ft3/mlx \
+  --adapter-path adapters/qwen3b-v3 --iters 2000 --batch-size 4 --num-layers 16 \
+  --learning-rate 1e-4 --max-seq-length 1280 --grad-checkpoint
+```
