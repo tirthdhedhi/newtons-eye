@@ -61,6 +61,13 @@ def fix_articles(text: str) -> str:
     return re.sub(r"\b([Aa]) (?=(?:8[\d.]*|11|18)\b)", lambda m: m.group(1) + "n ", text)
 
 
+def mass_or_none(m: float, rng: random.Random, p_omit: float = 0.55) -> tuple[str, str | None]:
+    """Projectile-type questions usually name no mass; then neither does the scene."""
+    if rng.random() < p_omit:
+        return "", None
+    return mass(m, rng)
+
+
 def pick_queries(rng: random.Random, names: list[str], low: int = 1) -> list[str]:
     k = rng.randint(low, len(names))
     chosen = rng.sample(names, k)
@@ -163,6 +170,7 @@ def finish(
     t: float | None,
 ) -> dict[str, str]:
     """The three styled questions from per-style givens and the (shared) ask phrases."""
+    terse = terse.strip()
     return {
         "textbook": assemble(rng, givens["textbook"], textbook_ask(rng, asks, when), word),
         "casual": assemble(rng, givens["casual"], casual_ask(rng, asks, when), word),
@@ -562,9 +570,11 @@ def projectile(rng: random.Random) -> Problem:
         t = min(t, math.floor(math.sqrt(2 * h / G) * 2) / 2 or 0.5)
     names = pick_queries(rng, ["p", "v"])
     word = pick(rng, BALL_WORDS)
-    m_text, m_scene = mass(m, rng)
+    m_text, m_scene = mass_or_none(m, rng)
     sp_text, sp_scene = speed(sp, rng)
     body: dict[str, Any] = {"id": "ball", "mass": m_scene}
+    if m_scene is None:
+        body.pop("mass")
     if components:
         body["velocity"] = [vx, vy, 0]
     else:
@@ -648,8 +658,10 @@ def free_fall(rng: random.Random) -> Problem:
     t = min(t, math.floor(t_hit * 2) / 2 or 0.5)
     names = pick_queries(rng, ["y", "v"])
     word = pick(rng, BALL_WORDS)
-    m_text, m_scene = mass(m, rng)
+    m_text, m_scene = mass_or_none(m, rng)
     body: dict[str, Any] = {"id": "ball", "mass": m_scene, "position": [0, h, 0]}
+    if m_scene is None:
+        body.pop("mass")
     if v_up:
         body["velocity"] = {"speed": f"{fmt(v_up)} m/s", "angle": "90 deg"}
     scene: dict[str, Any] = {"version": 1.1, "bodies": [body], "queries": []}
@@ -981,9 +993,11 @@ def flight(rng: random.Random) -> Problem:
     names = pick_queries(rng, options)
     start_ref = h > 0 and "H" in names and rng.random() < 0.3 and vy > 0
     word = pick(rng, BALL_WORDS)
-    m_text, m_scene = mass(m, rng)
+    m_text, m_scene = mass_or_none(m, rng)
     sp_text, sp_scene = speed(sp, rng)
     body: dict[str, Any] = {"id": "ball", "mass": m_scene, "shape": {"kind": "point"}}
+    if m_scene is None:
+        body.pop("mass")
     if h:
         body["position"] = [0, h, 0]
     if sp:
@@ -1182,6 +1196,67 @@ def spring_release(rng: random.Random) -> Problem:
     )
 
 
+# --- constant acceleration (no mass, no force) ---------------------------------------------------
+
+VEHICLES = ["car", "train", "cyclist", "bus", "motorcycle", "sled", "boat", "scooter"]
+
+
+def kinematics(rng: random.Random) -> Problem:
+    kind = pick(rng, ["speed_up", "speed_up", "rest", "brake"])
+    u = 0 if kind == "rest" else pick(rng, [5, 10, 12, 15, 20, 25, 30])
+    a = pick(rng, [1, 1.5, 2, 2.5, 3, 4, 5])
+    t = pick(rng, [2, 3, 4, 5, 6, 8, 10])
+    if kind == "brake":
+        a = -a
+        t = min(t, math.floor(u / -a))  # stay before the stop, so displacement = distance
+        if t < 1:
+            kind, a = "speed_up", -a
+            t = pick(rng, [2, 4, 5])
+    v_end = u + a * t
+    disp = u * t + 0.5 * a * t * t
+    names = pick_queries(rng, ["v", "x", "d"])
+    word = pick(rng, VEHICLES)
+    u_text, u_scene = speed(u, rng)
+    body: dict[str, Any] = {"id": "body", "constantAcceleration": f"{fmt(a)} m/s^2"}
+    if u:
+        body["velocity"] = {"speed": u_scene, "angle": "0 deg"}
+    scene: dict[str, Any] = {"version": 1.1, "bodies": [body], "queries": []}
+    for n in names:
+        if n == "v":
+            scene["queries"].append(query("v", "velocity", "body", at=t))
+        elif n == "x":
+            scene["queries"].append(query("x", "position", "body", at=t))
+        else:
+            scene["queries"].append(query("d", "distance", "body", **{"from": 0, "to": f"{t} s"}))
+    expected = {"v": [v_end, 0, 0], "x": [disp, 0, 0], "d": disp}
+    expected = {n: expected[n] for n in names}
+    compare = {"v": "x", "x": "x", "d": "value"}
+    ask_words = {
+        "v": ["its final velocity", "its velocity at the end", "how fast it is going at the end"],
+        "x": ["its displacement", "its position at the end, measured from the start"],
+        "d": ["the distance it covers", "how far it travels", "the distance travelled"],
+    }
+    asks = [pick(rng, ask_words[n]) for n in names]
+    rate = f"{fmt(abs(a))} m/s^2"
+    if kind == "rest":
+        textbook = f"A {word} starts from rest and accelerates uniformly at {rate} for {t} s."
+        casual = (
+            f"A {word} sets off from standstill and speeds up steadily at {rate} for {t} seconds."
+        )
+        terse = f"{word} from rest, a = {rate}, {t} s."
+    elif kind == "speed_up":
+        textbook = f"A {word} moving at {u_text} accelerates uniformly at {rate} for {t} s."
+        casual = f"A {word} is going {u_text} and speeds up at {rate} for {t} seconds."
+        terse = f"{word} at {u_text}, speeding up at {rate} for {t} s."
+    else:
+        textbook = f"A {word} moving at {u_text} brakes uniformly at {rate} for {t} s."
+        casual = f"A {word} doing {u_text} slows down at {rate} for {t} seconds."
+        terse = f"{word} at {u_text}, braking at {rate} for {t} s."
+    givens = {"textbook": [textbook], "casual": [casual]}
+    questions = finish(rng, word, givens, terse, asks, None, None)
+    return Problem("kinematics", questions, scene, expected, compare)
+
+
 def unsupported_problem(rng: random.Random) -> Problem:
     """A question outside the solver's scope; the target output is a refusal, not a scene."""
     category, questions = unsupported.make(rng)
@@ -1199,6 +1274,7 @@ FAMILIES: dict[str, Callable[[random.Random], Problem]] = {
     "ramp": ramp,
     "flight": flight,
     "spring-release": spring_release,
+    "kinematics": kinematics,
     "unsupported": unsupported_problem,
 }
 WEIGHTS = {
@@ -1212,6 +1288,7 @@ WEIGHTS = {
     "ramp": 3,
     "flight": 5,
     "spring-release": 2,
+    "kinematics": 4,
     "unsupported": 5,
 }
 

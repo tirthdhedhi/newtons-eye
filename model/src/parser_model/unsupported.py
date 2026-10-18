@@ -198,17 +198,6 @@ def _calculus(rng: random.Random) -> Texts:
     )
 
 
-def _no_mass(rng: random.Random) -> Texts:
-    u, a, t = pick(rng, [10, 15, 20]), pick(rng, [2, 3, 4]), pick(rng, [5, 8, 10])
-    return (
-        f"A car moving at {u} m/s accelerates uniformly at {a} m/s^2 for {t} s. Find its final speed and "
-        f"the distance covered.",
-        f"A car is doing {u} m/s and speeds up at {a} m/s^2 for {t} seconds. How fast is it going at the end, "
-        f"and how far did it go?",
-        f"u = {u} m/s, a = {a} m/s^2, t = {t} s: v and s.",
-    )
-
-
 def _inverse(rng: random.Random) -> Texts:
     m, a = pick(rng, [2, 5, 10, 20]), pick(rng, [1, 2, 3])
     return (
@@ -292,7 +281,6 @@ CATEGORIES: dict[str, Callable[[random.Random], Texts]] = {
     "banked or flat curve": _curve,
     "vertical circle": _vertical_circle,
     "calculus motion": _calculus,
-    "constant acceleration without a mass": _no_mass,
     "find the force from the motion": _inverse,
     "find the friction from the motion": _inverse_mu,
     "energy method": _spring_energy,
