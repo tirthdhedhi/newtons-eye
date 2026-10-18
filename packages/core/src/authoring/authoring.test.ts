@@ -22,6 +22,7 @@ const EXPRESSIBLE = [
   "projectile",
   "projectile-flight",
   "building-throw",
+  "car-accelerates",
   "sliding-stop",
   "spring-block",
 ];

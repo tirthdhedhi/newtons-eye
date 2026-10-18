@@ -38,6 +38,14 @@ export const Velocity = z.union([
 ]);
 
 export const AuthoringBody = Body.extend({
+  /** Optional: it only matters when a force other than gravity acts. Default 1 kg. */
+  mass: qty("mass").optional(),
+  /**
+   * Constant acceleration along the direction of motion (toward +x if the body starts at rest);
+   * negative brakes. The resolver adds the force that makes the body accelerate by exactly this
+   * much under gravity, so kinematics problems ("a car accelerates at 3 m/s^2") need no force.
+   */
+  constantAcceleration: qty("acceleration").optional(),
   shape: Shape.optional(),
   position: vec3("length").optional(),
   placement: Placement.optional(),

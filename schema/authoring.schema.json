@@ -389,6 +389,12 @@
           "fixed": {
             "type": "boolean"
           },
+          "constantAcceleration": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "placement": {
             "anyOf": [
               {
@@ -456,8 +462,7 @@
           }
         },
         "required": [
-          "id",
-          "mass"
+          "id"
         ],
         "additionalProperties": false
       }

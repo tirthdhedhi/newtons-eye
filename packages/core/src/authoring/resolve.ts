@@ -20,7 +20,11 @@ export const EVENT_DURATION = 60;
 export const DURATION_MARGIN = 1;
 
 type ResolvedShape = z.output<typeof Shape>;
-type OutBody = Omit<AuthoringBody, "placement" | "shape" | "position" | "velocity"> & {
+type OutBody = Omit<
+  AuthoringBody,
+  "placement" | "shape" | "position" | "velocity" | "mass" | "constantAcceleration"
+> & {
+  mass: number;
   shape: ResolvedShape;
   position: Vec3;
   velocity?: Vec3;
@@ -138,11 +142,27 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
   });
 
   // --- bodies --------------------------------------------------------------------------------
+  const prescribed: { id: string; kind: "applied"; body: string; vector: Vec3; frame: "world" }[] =
+    [];
   const bodies: OutBody[] = a.bodies.map((b, i) => {
     const path = `bodies[${i}]`;
     const shape = shapes.get(b.id)!;
     const h = halfHeight(shape);
-    const { placement, position: explicit, velocity, shape: _shape, ...rest } = b;
+    const {
+      placement,
+      position: explicit,
+      velocity,
+      shape: _shape,
+      mass: massGiven,
+      constantAcceleration: acceleration,
+      ...rest
+    } = b;
+    const mass = massGiven ?? 1;
+    if (massGiven === undefined)
+      note(
+        `${path}.mass`,
+        `"${b.id}" has no mass: using 1 kg (it only matters when a force other than gravity acts)`,
+      );
     let position: Vec3 = [0, 0, 0];
     let orientation = b.orientation;
 
@@ -253,8 +273,36 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
       }
     }
 
+    if (acceleration !== undefined) {
+      if (contactSurface.has(b.id)) {
+        err(
+          `${path}.constantAcceleration`,
+          "a body with a prescribed acceleration cannot also touch a surface",
+        );
+      } else {
+        const speed = vel ? Math.hypot(...vel) : 0;
+        const dir: Vec3 = vel && speed > 0 ? scale(vel, 1 / speed) : [1, 0, 0];
+        const wanted = scale(dir, acceleration);
+        const g = a.environment.gravity as Vec3;
+        // The force that cancels gravity and gives the wanted acceleration: m (a - g).
+        const vector = scale([wanted[0] - g[0], wanted[1] - g[1], wanted[2] - g[2]], mass);
+        prescribed.push({
+          id: `${b.id}:acceleration`,
+          kind: "applied",
+          body: b.id,
+          vector,
+          frame: "world",
+        });
+        note(
+          `${path}.constantAcceleration`,
+          `"${b.id}" accelerates at ${fmt(acceleration)} m/s^2 ${vel ? "along its velocity" : "toward +x"} (a force ${fmtVec(vector)} N cancels gravity and does it)`,
+        );
+      }
+    }
+
     return {
       ...rest,
+      mass,
       shape,
       position,
       ...(orientation ? { orientation } : {}),
@@ -289,6 +337,8 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
     );
     return { ...f, anchor: { point: anchorPoint } };
   });
+
+  forces.push(...(prescribed as unknown as typeof forces));
 
   // --- duration ------------------------------------------------------------------------------
   let duration = a.duration;

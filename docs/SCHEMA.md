@@ -33,6 +33,12 @@ A scene with `"version": 1.1` may use sugar that `parseScene` resolves into the 
 in a word problem: no coordinates, quaternions, shape sizes, durations, or pulley/anchor positions.
 Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes `schema/authoring.schema.json`.
 
+- `body.mass` optional, default 1 kg (a warning says so): it only matters when a force other than gravity acts, so
+  projectile and kinematics problems need not give one.
+- `body.constantAcceleration` (e.g. `"3 m/s^2"`, negative brakes): the body accelerates by exactly this much along its
+  direction of motion (toward +x if it starts at rest). The resolver adds the force `m (a - g)` that does it, so
+  "a car at 20 m/s accelerates at 3 m/s^2 for 8 s" needs no force or surface. Not allowed on a body that touches a
+  surface. (The key is not `acceleration`: that name is reserved for the solver's answer.)
 - `body.shape` optional, default box `[0.4, 0.2, 0.4]`. `body.position` optional (origin, or resting on its contact surface).
 - `body.placement`:
   - `{ on: <planeId>, at: "top" | "bottom" | <distance> }`: rest flush on the plane (`top` is the extent length along the slope).
