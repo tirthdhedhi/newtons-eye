@@ -1344,8 +1344,8 @@ WEIGHTS = {
     "flight": 5,
     "spring-release": 2,
     "kinematics": 4,
-    "unsupported": 5,
-    "partial": 3,
+    "unsupported": 4,
+    "partial": 2,
 }
 
 
