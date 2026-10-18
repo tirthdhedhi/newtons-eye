@@ -60,7 +60,11 @@ REFUSAL_SCHEMA: dict[str, Any] = {
 }
 
 
-def constrained_schema() -> dict[str, Any]:
-    """Schema for constrained decoding: a valid scene OR a refusal ``{"unsupported": reason}``."""
+def constrained_schema(allow_refusal: bool = True) -> dict[str, Any]:
+    """Schema for constrained decoding: a valid scene, plus (by default) a refusal.
+
+    The union made the model refuse in-scope questions (the grammar changes its first-token
+    behaviour), so ``allow_refusal=False`` gives the scene-only schema for a retry.
+    """
     scene = {k: v for k, v in load_schema().items() if k != "$schema"}
-    return {"anyOf": [scene, REFUSAL_SCHEMA]}
+    return {"anyOf": [scene, REFUSAL_SCHEMA]} if allow_refusal else scene

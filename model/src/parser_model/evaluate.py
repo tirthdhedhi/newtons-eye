@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import paths
+from . import paths, vote
 from .infer import ChatClient, InferConfig, InferError, detect_context_length
 from .metrics import METRICS, GoldCache, ItemResult, evaluate_item, summarize
 from .prompts import build_messages
@@ -36,6 +36,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--timeout", type=float, default=600.0)
     p.add_argument("--no-think", action="store_true", help="disable thinking modes")
     p.add_argument("--constrained", action="store_true", help="JSON-schema constrained output")
+    p.add_argument(
+        "--scene-only",
+        action="store_true",
+        help="with --constrained: constrain to a scene only (no refusal branch)",
+    )
+    p.add_argument(
+        "--vote",
+        type=int,
+        default=0,
+        metavar="K",
+        help="self-consistency: greedy + K sampled outputs, majority of the valid ones wins",
+    )
+    p.add_argument("--vote-temperature", type=float, default=0.7)
     p.add_argument("--no-schema-in-prompt", action="store_true", help="omit the schema text")
     p.add_argument("--shots", type=int, default=3, help="few-shot examples per prompt")
     p.add_argument("--example", action="append", help="only these examples (repeatable)")
@@ -97,7 +110,9 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
         max_tokens=args.max_tokens,
         timeout=args.timeout,
     )
-    client = ChatClient(config, schema=paths.constrained_schema() if args.constrained else None)
+    client = ChatClient(
+        config, schema=paths.constrained_schema(not args.scene_only) if args.constrained else None
+    )
     offline = json.loads(Path(args.outputs).read_text()) if args.outputs else None
     prompt_chars = sum(
         len(m["content"])
@@ -138,15 +153,26 @@ def run(args: argparse.Namespace) -> tuple[list[ItemResult], dict[str, Any]]:
                 include_schema=not args.no_schema_in_prompt,
             )
             try:
-                completion = client.complete(messages)
-                raw, info = (
-                    completion.raw,
-                    {
-                        "mode": completion.mode,
-                        "seconds": round(completion.seconds, 2),
-                        "usage": completion.usage,
-                    },
-                )
+                if args.vote:
+                    raw, info = vote.choose(
+                        client,
+                        messages,
+                        k=args.vote,
+                        temperature=args.vote_temperature,
+                        schema=schema,
+                        solver=solve_scene,
+                    )
+                    info = {"mode": "vote", **info}
+                else:
+                    completion = client.complete(messages)
+                    raw, info = (
+                        completion.raw,
+                        {
+                            "mode": completion.mode,
+                            "seconds": round(completion.seconds, 2),
+                            "usage": completion.usage,
+                        },
+                    )
             except InferError as e:
                 raw, info = "", {"error": str(e)}
             result = evaluate_item(item, raw, schema=schema, gold=gold, solver=solve_scene)
