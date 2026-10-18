@@ -130,3 +130,30 @@ def test_partial_refusals_extend_an_in_scope_question():
         assert set(p.scene) == {"unsupported"}
         assert all(len(q) > 40 for q in p.questions.values())
         assert any(w in p.questions["textbook"].lower() for w in ("also", "in addition"))
+
+
+def test_dataset_drops_val_test_questions_that_also_appear_in_train(tmp_path):
+    from parser_model.dataset import make_dataset
+    from parser_model.splits import split_of
+
+    base = {"family": "x", "style": "terse", "scene": {"version": 1.1, "bodies": []}}
+    records = []
+    for n in range(400):  # many problems, a few of which render the same question text
+        records.append({**base, "id": f"p{n}", "parent": f"p{n}", "question": f"q {n % 120}"})
+    splits_of = {r["id"]: split_of(r) for r in records}
+    assert {"train", "val", "test"} <= set(splits_of.values())
+    summary = make_dataset(records, tmp_path)
+    assert summary["dropped_val_test_questions_also_in_train"] > 0
+    train_q = {
+        json.loads(line)["messages"][1]["content"]
+        for line in (tmp_path / "train.jsonl").read_text().splitlines()
+    }
+    for name in ("val", "test"):
+        for line in (tmp_path / f"{name}.jsonl").read_text().splitlines():
+            row = json.loads(line)
+            q = (
+                row["messages"][1]["content"]
+                if "messages" in row
+                else f"Problem: {row['question']}\nJSON:"
+            )
+            assert q not in train_q

@@ -19,7 +19,7 @@ from typing import Any
 from . import paths
 from .generate import build
 from .prompts import finetune_messages
-from .splits import assign, check_no_leakage
+from .splits import _normalise, assign, check_no_leakage
 
 
 def compact(scene: dict[str, Any]) -> str:
@@ -61,6 +61,13 @@ def make_dataset(
         if json.dumps(scene, sort_keys=True) not in forbidden:
             kept.append(record)
     splits = assign(kept, holdout_families)
+    # Two different problems can render the same question (same numbers): keep it in training only.
+    train_questions = {_normalise(r["question"]) for r in splits["train"]}
+    dropped_dupes = 0
+    for name in ("val", "test"):
+        unique = [r for r in splits[name] if _normalise(r["question"]) not in train_questions]
+        dropped_dupes += len(splits[name]) - len(unique)
+        splits[name] = unique
     check_no_leakage(splits)
     seed_questions = {
         r["question"] for r in paths.load_seed(paths.model_dir() / "data" / "seed.jsonl")
@@ -87,6 +94,7 @@ def make_dataset(
     )
     return {
         "dropped_as_seed_duplicates": len(records) - len(kept),
+        "dropped_val_test_questions_also_in_train": dropped_dupes,
         **{name: len(rows) for name, rows in splits.items()},
         "problems": {name: len({r["parent"] for r in rows}) for name, rows in splits.items()},
     }
@@ -99,15 +107,30 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=str(paths.model_dir() / "data" / "ft"))
     p.add_argument("--holdout-family", action="append", default=[])
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument(
+        "--reuse", action="store_true", help="use an existing synthetic.jsonl, do not regenerate"
+    )
+    p.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        help="more records to merge before splitting (e.g. paraphrases); split by their parent",
+    )
     args = p.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     raw = out / "synthetic.jsonl"
-    report = build(args.problems, args.seed, raw, args.workers)
-    print(f"generated {report['kept']}/{report['requested']} verified problems")
-    for pid, why in report["dropped"][:10]:
-        print(f"  dropped {pid}: {why[:120]}")
-    summary = make_dataset(load_records(raw), out, tuple(args.holdout_family))
+    if args.reuse and raw.exists():
+        print(f"reusing {raw}")
+    else:
+        report = build(args.problems, args.seed, raw, args.workers)
+        print(f"generated {report['kept']}/{report['requested']} verified problems")
+        for pid, why in report["dropped"][:10]:
+            print(f"  dropped {pid}: {why[:120]}")
+    records = load_records(raw)
+    for extra in args.extra:
+        records += load_records(Path(extra))
+    summary = make_dataset(records, out, tuple(args.holdout_family))
     print(json.dumps(summary, indent=2))
     return 0
 
