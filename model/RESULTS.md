@@ -109,3 +109,39 @@ small gain. The fix has to come from training data.
 `mlx_lm.fuse --dequantize` writes a standard HF model, `convert_hf_to_gguf.py` + `llama-quantize` make a
 GGUF, and `ollama create` imports it (Ollama 0.40's own safetensors import does not support Qwen2).
 The Modelfile bakes in the system prompt, so a client sends only `Problem: <question>\nJSON:`.
+
+
+## v4 (wording variety + partial refusals): current best
+
+v4 adds to v3: richer ask vocabulary ("normal reaction", "total time to reach the ground", "initial
+restoring force", "whether the block moves and its acceleration"), a `partial` family (an in-scope
+problem plus one ask the solver cannot compute, such as energy or momentum, which must be refused instead of
+half-answered), and about 1,400 LLM paraphrases of training questions (gemma3:4b rewrote them; each kept
+only if every number and every asked quantity survived, and 32 that changed the physics were dropped).
+13,903 training examples, 3 000 iterations, validation loss 0.08.
+
+| test | v2 | v3 | **v4** |
+| --- | --- | --- | --- |
+| seed set (21) | 21 | 21 | **21** |
+| hard set (15) | 15 | 14 | 14 (one invented mass) |
+| paraphrases of held-out problems (300, in-scope only) | 292 | 287 | **295 (98.3%)** |
+| held-out generated problems, all 13 families (300) | n/a | 297 | **300** |
+| exam-style dev set written by the project owner (30) | n/a | 20 | **25** |
+
+On the 30-question dev set v4 refuses 18 of 20 out-of-scope questions correctly (v3: 16) and gets 7 of 10
+in-scope questions right (v3: 4). Remaining misses: a dropped `time until land` query (two questions), a
+dropped `velocity` query (one), and two unsupported questions it answered anyway (minimum stretch to start
+sliding, a banked road). Every in-scope miss is a **dropped query, never a wrong value**.
+
+Caveats: the 30 questions were used to steer v4's data, so 25/30 is optimistic; a fresh batch is the honest
+test. The paraphrase and held-out sets share the generator's problem structure. Sleep interrupted the
+overnight scoring on a battery-powered Mac; use `caffeinate` for long runs.
+
+## What to do next
+
+1. Count the asks: train the model to write a one-line "find: ..." summary first, and check the scene
+   covers every asked quantity (resample if not). Targets the dropped-query failures.
+2. More multi-ask training questions (three or four asks, odd orders).
+3. A fresh, never-tuned test set written by someone else.
+4. App-side pipeline (validate, solve, explain, retry, intent labels) around the model.
+5. Widen the solver: relative motion, pulleys, series/parallel springs, circular motion.
