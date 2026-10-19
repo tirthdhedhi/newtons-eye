@@ -7,7 +7,8 @@ must then match one of them, compared by absolute value, or be in ``DEFAULTS``.
 
 Documented allowances:
 
-* ``DEFAULTS``: ``g = 9.81``, ``0`` (zero friction, offset or angle) 90 degrees ("straight up") and 180 degrees ("toward each other").
+* ``DEFAULTS``: ``g = 9.81``, ``0`` (zero friction, offset or angle), 90 degrees ("straight up") and
+  180 degrees ("toward each other").
 * Derived values: for any two question quantities of the same dimension, ``hypot`` of the pair and
   ``atan2`` of the pair (radians) are allowed, so "10 m/s across and 10 m/s up" may be written as
   ``14.142 m/s at 45 deg``.
