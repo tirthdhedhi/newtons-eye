@@ -1,5 +1,7 @@
 # model/: word problem -> authoring scene
 
+The history of this work (every problem and fix) is in [`docs/MODEL_DEVELOPMENT.md`](../docs/MODEL_DEVELOPMENT.md); the numbers are in [`RESULTS.md`](RESULTS.md).
+
 Python side of the project. This directory holds an **evaluation harness** and a **seed set** for
 measuring how well off-the-shelf small models turn word problems into authoring scenes
 (`schema/authoring.schema.json`, schema v1.1). No training yet. The TypeScript packages are not

@@ -1,0 +1,172 @@
+# Parser model: development log
+
+What was built, in what order, what went wrong, and how each problem was handled. The numbers are in
+[`model/RESULTS.md`](../model/RESULTS.md); how to run things is in [`model/README.md`](../model/README.md).
+This file is the story behind them, so the same mistakes are not repeated.
+
+## 1. The goal and the shape of the solution
+
+A fine-tuned **small** language model turns a physics word problem into a JSON scene (the authoring format
+in `schema/authoring.schema.json`). The TypeScript solver in `packages/core` does all the physics. The model
+never computes anything; it only translates. When a question is beyond what the solver supports, the model
+answers `{"unsupported": "<reason>"}`.
+
+Rules that held the whole way through:
+
+- The scene holds only givens (the repo rule). Answers, normal force, tension and the key `acceleration`
+  are never written in a scene.
+- Every claim about quality is measured by running the **real solver**, not by comparing text.
+- Training data is generated or openly licensed. No copyrighted textbook text is used.
+- Held-out problems never reach training (split by problem, with leakage checks).
+
+## 2. Timeline
+
+| phase                    | what was done                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1. Harness               | Python package `parser_model`: prompts, an OpenAI-compatible client, a wrapper around `pnpm solve`, grounding check, metrics, `evaluate` CLI, 27-question seed set |
+| 2. Baselines             | Untuned qwen2.5-coder 7B, qwen3 4B, gemma3 4B with the schema and three examples in the prompt                                                                     |
+| 3. Data                  | Template generator with closed-form answers verified against the solver; OpenStax extractor; train/val/test splits                                                 |
+| 4. Fine-tuning v1 and v2 | LoRA on Qwen2.5-Coder-3B with MLX; v2 added wording variety                                                                                                        |
+| 5. The 7B model          | NaN losses, then a float32 fix; tied the 3B, so the 3B was chosen                                                                                                  |
+| 6. Independent tests     | A hard set and an LLM-paraphrased set, because the first tests were too close to the training wording                                                              |
+| 7. Solver extension      | Time of flight, max height, range, optional mass, constant acceleration, a launch bug fix                                                                          |
+| 8. v3 and v4             | New families, refusals, partial refusals, 1,400 LLM-paraphrased training questions, export to Ollama                                                               |
+| 9. Next                  | The dropped-query fix (section 8)                                                                                                                                  |
+
+## 3. Results at a glance (`solver_match`)
+
+| model                                       | seed (21) | hard (15) | paraphrases (300) | held-out generated | owner's 30 questions |
+| ------------------------------------------- | --------- | --------- | ----------------- | ------------------ | -------------------- |
+| untuned 7B, best baseline                   | 9         | n/a       | n/a               | n/a                | n/a                  |
+| v1 (3B, 6 families)                         | 14        | 11        | n/a               | 150/150            | n/a                  |
+| v2 (3B, 8 families, varied wording)         | 21        | 15        | 292               | 300/300            | n/a                  |
+| v2 7B                                       | 21        | 14        | 291               | 150/150            | n/a                  |
+| v3 (3B, wider scope, refusals)              | 21        | 14        | 287               | 297/300            | 20/30                |
+| **v4 (3B, more wording, partial refusals)** | 21        | 14        | **295**           | **300/300**        | **25/30**            |
+
+Choice: the **3B** model. It ties the 7B on everything, trains and runs about 2.5 times faster, needs no
+float32 workaround, and exports to a 3 GB file. Caveat: the owner's 30 questions steered v4's data, so 25/30
+is optimistic.
+
+## 4. Problems and fixes, in the order they happened
+
+### Environment and tooling
+
+| problem                                    | cause                                            | fix                                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm solve` crashed                       | default Node was 20; pnpm 11 needs 22 or later   | the solver wrapper puts the Node from `.nvmrc` (24, found under `~/.nvm`) first on `PATH`; `NEWTONS_NODE_BIN` overrides it |
+| system Python was 3.9                      | macOS default                                    | a venv from Homebrew's Python 3.12                                                                                         |
+| `AGENTS.md` missing                        | the prompt named a file the repo does not have   | followed `CLAUDE.md`                                                                                                       |
+| the home folder was a git repo             | an empty stray `~/.git`                          | removed (it had no commits, no remote)                                                                                     |
+| eslint and prettier failed on Python files | they scanned `model/.venv` and generated results | `model/**` added to the eslint ignores and `model` to `.prettierignore`                                                    |
+| long jobs stalled overnight                | the laptop went to sleep on battery              | `caffeinate -dimsu`, plug in the charger, keep the lid open; jobs resume after sleep, nothing is lost                      |
+
+### Baselines and the harness
+
+| problem                                          | cause                                                                                                                             | fix                                                                                                                                                                                           |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| first baseline scores were meaningless           | the prompt (schema plus examples) is about 6.5k tokens; Ollama's default context is 4096, so it was silently truncated            | `num_ctx` 16384 model variants; the harness now reads `num_ctx` from Ollama and warns when the prompt cannot fit                                                                              |
+| "constrained" run was identical to the plain run | Ollama rejects `items: false` in tuple arrays; the fallback chain then reached `guided_json`, which Ollama accepts and ignores    | `simplify_schema` rewrites tuple arrays for the grammar; a schema-conversion error now stops with a clear message instead of falling back                                                     |
+| MLX server returned 404 for every request        | it treats the request's `model` as a Hugging Face repo name                                                                       | send `default_model`                                                                                                                                                                          |
+| two of the nine examples could not be scored     | `atwood` and `table-hanging` have only canonical scenes (no authoring version: the sugar cannot place a pulley or a table height) | marked `pending` in the seed set and left out of the scores; a self-test feeds each gold authoring scene through every metric and all seven pass                                              |
+| grounding flagged correct scenes                 | "20-degree" and LaTeX like `20^\circ` were not parsed as quantities                                                               | the question is cleaned of LaTeX and hyphenated units are accepted (11 false alarms out of 300 removed)                                                                                       |
+| derived values failed grounding                  | a projectile written as "14.1 m/s at 45 degrees" from components 10 and 10                                                        | `hypot` and `atan2` of same-unit pairs are allowed; `90 degrees` ("straight up") and `g = 9.81` are documented defaults                                                                       |
+| answers matched by query id, which is arbitrary  | models name queries differently                                                                                                   | answers are matched by a signature: ask, body, force, connection, `until`, `at`, `from`, `to`, `above`; bodies are named by mass, connections by the masses they join; a missing `at` means 0 |
+| wrong paraphrases passed number checks           | `m/s^2` added a spurious "2"                                                                                                      | unit exponents are removed before numbers are compared                                                                                                                                        |
+
+### The textbook data
+
+| problem                                   | cause                                                                                                                               | fix                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| the uploaded Halliday and HC Verma PDFs   | the files came from OceanofPDF, a site of unauthorized copies; a "combined" PDF built from them later had the same origin           | not used, and the folder is gitignored; OpenStax University Physics (free, CC BY) was used instead, parsed from its CNXML sources |
+| OpenStax yielded little                   | of about 600 exercises in chapters 2 to 6, most ask inverse questions, give no mass, need graphs, or need geometry the schema lacks | only a handful are expressible; three are used verbatim in the hard set, checked against the book's answers                       |
+| solver gaps found while writing templates | `time` events were only stop, edge, slack, slide start; a `distance` query covered only the default 2 s window; mass was mandatory  | the solver was extended (section 5)                                                                                               |
+
+### Training the 7B model
+
+| problem                                                           | cause                                                                                                                                   | fix                                                                                                                                                |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| loss went to NaN after about 20 iterations at every learning rate | `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` stores scales, biases and norms in float16, and Qwen2.5-7B overflows float16 activations | float32 activations (`train_mlx.py`, `generate_mlx.py`); bfloat16 trained unstably, a lower learning rate and gradient clipping did not help alone |
+| generation ran out of memory                                      | training held most of the GPU memory                                                                                                    | do not run generation during training                                                                                                              |
+| the stock MLX server would overflow too                           | it loads float16                                                                                                                        | generate with `generate_mlx.py` and score the outputs offline (`--outputs`)                                                                        |
+| Colab free T4 showed a 15 hour estimate                           | 85 tokens per second for a 7B model with 4-bit dequantization and checkpointing                                                         | stopped; the notebook also runs on Kaggle with `EPOCHS = 1`, but the 3B was chosen instead                                                         |
+| Colab `TypeError: warmup_ratio`                                   | newer `transformers` removed it                                                                                                         | `warmup_steps`                                                                                                                                     |
+| Colab pip warning about `pyarrow` and `cudf`                      | preinstalled `cudf` is not used                                                                                                         | ignored                                                                                                                                            |
+
+### Data and test design
+
+| problem                                                                    | cause                                                                                                                 | fix                                                                                                                                                                 |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tests were too easy                                                        | seed and hard sets were written by the same author as the templates, so their wording matched training                | an independent set: held-out problems rewritten by a different model (gemma3 or qwen2.5-coder via Ollama), kept only if every number and asked quantity survived    |
+| v1 scored 14/21 on the seed set but 150/150 on held-out generated problems | it had learned the template wording, not the language                                                                 | v2: ask framings, synonyms, mixed units (g, cm, km/h), distractor sentences, component-form velocities, more object names                                           |
+| the spring-block misses                                                    | first guessed to be a harness fairness issue (start height); wrong                                                    | the model had written no `contacts` entry, so the block was not on the floor                                                                                        |
+| 11 of 12 in-scope questions in the owner's list failed on first contact    | out-of-scope questions got a confident wrong scene; one friction coefficient given (not two) produced an invented 0.1 | a refusal path with 23 categories of out-of-scope questions; friction questions that state only the kinetic or one generic coefficient (the scene uses it for both) |
+| "1 seconds", "a 8 kg", outcome words like "slides" in questions            | template wording                                                                                                      | helper functions for plurals and articles, and a test that questions never leak outcomes                                                                            |
+| the same question rendered twice with different parents                    | small parameter spaces at 6,000 problems                                                                              | the dataset builder keeps such questions in training only and reports how many it dropped                                                                           |
+| paraphrases changed the physics                                            | for example "stretched" became "compressed"                                                                           | a drift filter (compress, bounce, ...) when merging; 32 dropped                                                                                                     |
+| paraphrase tool rejected most outputs                                      | models add chatty framing ("Here is a rewrite:")                                                                      | `extract_problem` keeps the problem paragraph; the yield rose from roughly 40 to roughly 55 percent                                                                 |
+| Ollama paraphrasing did not speed up with threads                          | one GPU serializes requests                                                                                           | ran sequentially, resumable; about 7 problems a minute                                                                                                              |
+
+### The solver
+
+| problem                                                        | cause                                                                   | fix                                                                                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| a ball launched upward from the ground flew in a straight line | a body touching a plane was treated as held on it even when moving away | a touching body that moves away from the surface leaves it                                                                            |
+| a projectile "lands" 0.1 m early                               | the default authoring shape is a 0.4 x 0.2 x 0.4 box                    | projectile scenes use `"shape": {"kind": "point"}`                                                                                    |
+| "when does it stop" failed beyond 2 s                          | the default window was 2 s                                              | event-driven queries (time until, range, max height, open-ended distance) default to 60 s                                             |
+| mass was required                                              | the schema needed it                                                    | optional, default 1 kg with a warning                                                                                                 |
+| no way to say "accelerates at 3 m/s^2"                         | only forces move bodies                                                 | `constantAcceleration` adds the force `m (a - g)`; the key is not `acceleration` because the validator reserves that name for answers |
+| impact velocity read as zero                                   | the event timestamp is after the body comes to rest                     | queries at `{event: land}` read the instant before impact                                                                             |
+
+### Export and inference
+
+| problem                                      | cause                                                                                                                                                 | fix                                                                                                                                 |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Ollama could not import the model            | its safetensors importer does not support Qwen2, and `q8_0` is not an accepted quantization                                                           | `mlx_lm.fuse --dequantize`, then llama.cpp `convert_hf_to_gguf.py` and `llama-quantize` to Q8_0, then `ollama create` from the GGUF |
+| the converter crashed                        | `extra_special_tokens` was a list in the fused tokenizer config                                                                                       | removed it before converting                                                                                                        |
+| constrained decoding made things worse       | a grammar that allows a scene or a refusal made the model refuse 10 in-scope questions; a scene-only grammar scored 0/10 because queries were dropped | not used; the exported model's plain output matched MLX exactly (20/30), so the export is faithful                                  |
+| the model sometimes drops or invents a query | a small model under-attends to the second and third ask; samples make the same slip                                                                   | self-consistency voting (`--vote K`) gave 20 to 22 of 30; the real fix is in section 8                                              |
+
+## 5. Solver extension (TypeScript)
+
+Branch `v3-flight-and-scope`, PR 4. New queries: `time until land`, `max_height` (`above: ground` or `start`),
+`range`; velocity or position `at: {event: "land"}`. New behaviours: launches leave the surface, event-driven
+default window of 60 s, optional mass, `constantAcceleration`. 125 Vitest tests, hand-computed values, three new
+example pairs, updated `docs/SCHEMA.md` and `schema/authoring.schema.json`.
+
+## 6. Process lessons
+
+- Measure with the real solver. Comparing text hides scenes that look right and compute wrong.
+- A test written by the author of the training data is a sanity check, not evidence. Keep a test nobody has tuned on.
+- A silent fallback is worse than an error: both the context truncation and the constrained-decoding no-op produced
+  plausible numbers that meant nothing.
+- When a metric flags something, check whether the metric is wrong (grounding was, twice) before blaming the model.
+- Saturated tests stop discriminating. When three models tie, build a harder test, not a bigger model.
+- A refusal path matters as much as accuracy: a confident wrong answer is the worst failure for a tutor.
+
+## 7. Open limits
+
+- Only about a third of textbook problems are expressible: no vectors, circular motion, pulleys, connected bodies,
+  relative motion, series or parallel springs, energy methods, collisions, or inverse problems.
+- The model sometimes drops a query it was asked for (v4 on the owner's 30 questions: three misses, all drops).
+- The owner's 30 questions are a development set; a fresh set is needed for a clean number.
+- Training used about 3 hours per version on a 16 GB Mac; there is no cloud route that is both free and fast enough.
+
+## 8. The dropped-query fix (in progress)
+
+Plan, three parts: (1) a completeness check that compares the question's wording with the scene's queries and
+resamples when an ask is missing; (2) a `"title": "find: ..."` line the model writes before the scene, so the asks
+are listed before they are encoded; (3) more training questions with three or four asks in odd orders.
+Results will be added here and to `model/RESULTS.md`.
+
+## 9. File map
+
+| path                                                                                       | what it is                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model/src/parser_model/`                                                                  | prompts, inference client, solver wrapper, grounding, metrics, evaluate CLI, generator, phrasing, refusals, dataset builder, splits, OpenStax extractor, paraphrase tool, voting |
+| `model/train_mlx.py`, `model/generate_mlx.py`                                              | float32 MLX training and generation                                                                                                                                              |
+| `model/colab/`                                                                             | Colab/Kaggle notebook for 7B LoRA                                                                                                                                                |
+| `model/data/seed.jsonl`, `model/data/hard.jsonl`                                           | the hand-written test sets                                                                                                                                                       |
+| `model/RESULTS.md`                                                                         | all numbers                                                                                                                                                                      |
+| `packages/core/src/solver`, `authoring`                                                    | the solver extension                                                                                                                                                             |
+| `model/private/`, `model/data/ft*/`, `model/adapters/`, `model/exports/`, `model/results/` | gitignored: third-party material, generated data, weights, outputs                                                                                                               |
