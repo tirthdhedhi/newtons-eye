@@ -186,4 +186,5 @@ voting (`--vote 6`) also 29/30, so the model is already consistent and voting ad
 
 Caveats: the owner's questions steered the data of v4 and v5, so 29/30 is optimistic. A fresh set of questions
 written by someone else is the next honest test. The remaining paraphrase-set misses (3 of 300) are one invalid
-JSON, one wrong value, and one missing edge-time query.
+JSON, one missing edge-time query, and one in-scope question refused; a fourth item has the right answer but
+uses a speed that is not stated in the question (flagged by the grounding check only).
