@@ -86,3 +86,40 @@ def asks_complete(scene: dict[str, Any]) -> bool:
     if declared is None:
         return True
     return len(scene.get("queries", [])) >= len(declared)
+
+
+# Everything ask_label can produce: what the solver can compute.
+KNOWN_ASKS = frozenset(
+    {
+        "normal force",
+        "friction force",
+        "tension",
+        "net force",
+        "force",
+        "time of flight",
+        "time to stop",
+        "time to reach the edge",
+        "time until the string goes slack",
+        "time until it starts to slide",
+        "time",
+        "velocity",
+        "impact velocity",
+        "maximum height",
+        "minimum static friction coefficient",
+        "acceleration",
+        "position",
+        "distance",
+        "work",
+        "range",
+        "relative velocity",
+    }
+)
+
+
+def unknown_asks(scene: dict[str, Any]) -> list[str]:
+    """Declared asks outside what the solver can compute (e.g. "separation", "equilibrium").
+
+    A model that lists such a thing in its ``find:`` line has noticed the question wants something
+    the scene format cannot express; the right answer is a refusal, whatever scene it wrote.
+    """
+    return [a for a in (declared_asks(scene) or []) if a.lower() not in KNOWN_ASKS]

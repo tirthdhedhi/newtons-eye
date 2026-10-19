@@ -1392,9 +1392,11 @@ def verify(problem: Problem, rel: float = 1e-3) -> list[str]:
     return bad
 
 
-def make_problems(n: int, seed: int, prefix: str = "syn") -> list[tuple[str, Problem]]:
+def make_problems(
+    n: int, seed: int, prefix: str = "syn", families: list[str] | None = None
+) -> list[tuple[str, Problem]]:
     rng = random.Random(seed)
-    names = [f for f, w in WEIGHTS.items() for _ in range(w)]
+    names = [f for f, w in WEIGHTS.items() for _ in range(w) if families is None or f in families]
     seen: set[str] = set()
     out = []
     counters: dict[str, int] = {}
@@ -1413,9 +1415,14 @@ def make_problems(n: int, seed: int, prefix: str = "syn") -> list[tuple[str, Pro
 
 
 def build(
-    n: int, seed: int, out_path: Path, workers: int = 4, prefix: str = "syn"
+    n: int,
+    seed: int,
+    out_path: Path,
+    workers: int = 4,
+    prefix: str = "syn",
+    families: list[str] | None = None,
 ) -> dict[str, Any]:
-    problems = make_problems(n, seed, prefix)
+    problems = make_problems(n, seed, prefix, families)
     with ThreadPoolExecutor(workers) as pool:
         verdicts = list(pool.map(lambda item: verify(item[1]), problems))
     kept, dropped = 0, []
@@ -1447,7 +1454,8 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args[1] if len(args) > 1 else "data/synthetic.jsonl")
     seed = int(args[2]) if len(args) > 2 else 0
     prefix = args[3] if len(args) > 3 else "syn"
-    report = build(n, seed, out, prefix=prefix)
+    families = args[4].split(",") if len(args) > 4 else None
+    report = build(n, seed, out, prefix=prefix, families=families)
     print(f"kept {report['kept']}/{report['requested']} problems -> {out}")
     for pid, why in report["dropped"][:20]:
         print(f"  dropped {pid}: {why[:150]}")

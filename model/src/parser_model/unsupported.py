@@ -251,6 +251,115 @@ def _slip_angle(rng: random.Random) -> Texts:
     )
 
 
+def _position_polynomial(rng: random.Random) -> Texts:
+    a, b, c, d = (
+        pick(rng, [1, 2, 3]),
+        pick(rng, [6, 9, 12, 15]),
+        pick(rng, [12, 18, 24]),
+        pick(rng, [2, 5, 8]),
+    )
+    t = pick(rng, [4, 5, 6])
+    return (
+        f"The position of a particle on the x-axis is x(t) = {a}t^3 - {b}t^2 + {c}t + {d} (metres, seconds). "
+        f"During the first {t} seconds, when does it reverse direction and what total distance does it cover?",
+        f"A bug's position along a line is x = {a}t^3 - {b}t^2 + {c}t + {d}. Over the first {t} s, "
+        f"when does it turn around and how far does it travel in total?",
+        f"x(t) = {a}t^3 - {b}t^2 + {c}t + {d}, 0 to {t} s: turning instants, total distance.",
+    )
+
+
+def _growing_deceleration(rng: random.Random) -> Texts:
+    u, c = pick(rng, [10, 15, 20, 30]), pick(rng, [0.2, 0.4, 0.5, 1])
+    return (
+        f"A tram moving at {u} m/s starts braking with a deceleration that grows steadily with time, "
+        f"a = {fmt(c)}t (SI units). When does it stop and how far does it go?",
+        f"A tram doing {u} m/s brakes harder and harder: deceleration = {fmt(c)} times the elapsed seconds. "
+        f"How long until it stops, and how far?",
+        f"u = {u} m/s, a = -{fmt(c)}t: stop time and stopping distance.",
+    )
+
+
+def _two_projectiles(rng: random.Random) -> Texts:
+    v, a1, a2 = pick(rng, [20, 25, 30, 40]), pick(rng, [30, 35, 40]), pick(rng, [50, 55, 60])
+    return (
+        f"Two stones are thrown at the same time from level ground, both at {v} m/s, one at {a1} degrees and "
+        f"the other at {a2} degrees above the horizontal. Find the difference between their maximum heights "
+        f"and how far apart they are horizontally when the first one lands.",
+        f"I throw two stones together at {v} m/s, one {a1} degrees up and one {a2} degrees up. By how much do "
+        f"their peak heights differ, and how far apart are they when the first hits the ground?",
+        f"Two stones, {v} m/s, {a1} deg and {a2} deg, same start: height difference; separation at first landing.",
+    )
+
+
+def _against_wall(rng: random.Random) -> Texts:
+    m, f, ang, mu = (
+        pick(rng, [2, 4, 5]),
+        pick(rng, [60, 80, 100]),
+        pick(rng, [15, 20, 30]),
+        pick(rng, [0.3, 0.4, 0.5]),
+    )
+    return (
+        f"A {m} kg block is pressed against a vertical wall by a force of {f} N directed {ang} degrees above the "
+        f"horizontal. The coefficient of static friction is {fmt(mu)}. What are the normal force and the "
+        f"friction force, and does the block stay at rest?",
+        f"I'm holding a {m} kg block on a wall, pushing with {f} N at {ang} degrees upward (mu_s = {fmt(mu)}). "
+        f"Will it slide down? What are the normal and friction forces?",
+        f"{m} kg against a wall, {f} N at {ang} deg above horizontal, mu_s {fmt(mu)}: forces, does it slip?",
+    )
+
+
+def _largest_at_rest(rng: random.Random) -> Texts:
+    m, k, f, mu = (
+        pick(rng, [2, 3, 4]),
+        pick(rng, [100, 150, 200]),
+        pick(rng, [20, 30, 40]),
+        pick(rng, [0.3, 0.4, 0.5]),
+    )
+    return (
+        f"A {m} kg block on a rough floor (static friction coefficient {fmt(mu)}) is joined to a wall by a spring "
+        f"of constant {k} N/m. A {f} N horizontal force pulls it away from the wall. What is the largest "
+        f"extension at which the block can still stay at rest?",
+        f"A {m} kg block is tied to a wall by a {k} N/m spring and pulled with {f} N along a floor with "
+        f"mu_s = {fmt(mu)}. How far can the spring stretch while the block holds still?",
+        f"{m} kg, spring {k} N/m, pull {f} N, mu_s {fmt(mu)}: largest stretch with the block at rest.",
+    )
+
+
+def _rough_then_smooth(rng: random.Random) -> Texts:
+    m, k, x, d, mu = (
+        pick(rng, [1, 2, 3]),
+        pick(rng, [200, 400, 500]),
+        pick(rng, [0.1, 0.15, 0.2]),
+        pick(rng, [0.3, 0.5, 0.8]),
+        pick(rng, [0.1, 0.2, 0.3]),
+    )
+    return (
+        f"A {m} kg block is released from a spring ({k} N/m) compressed by {fmt(x)} m. For the first {fmt(d)} m "
+        f"of its path the floor is rough (kinetic friction coefficient {fmt(mu)}) and after that it is smooth. "
+        f"How fast is it moving once it reaches the smooth part?",
+        f"A spring ({k} N/m, compressed {fmt(x)} m) fires a {m} kg block across {fmt(d)} m of rough floor "
+        f"(mu_k = {fmt(mu)}) and then onto ice. What is its speed on the ice?",
+        f"{m} kg, spring {k} N/m compressed {fmt(x)} m, rough for {fmt(d)} m (mu_k {fmt(mu)}) then smooth: speed on smooth part.",
+    )
+
+
+def _max_compression(rng: random.Random) -> Texts:
+    m, v, d, mu, k = (
+        pick(rng, [1, 2, 3]),
+        pick(rng, [5, 6, 8]),
+        pick(rng, [0.5, 1, 2]),
+        pick(rng, [0.1, 0.2, 0.3]),
+        pick(rng, [300, 500, 800]),
+    )
+    return (
+        f"A {m} kg block slides at {v} m/s along a rough floor (kinetic friction coefficient {fmt(mu)}) toward "
+        f"a spring of constant {k} N/m that is {fmt(d)} m away. How far is the spring compressed at most?",
+        f"A {m} kg puck is shot at {v} m/s over {fmt(d)} m of rough floor (mu_k = {fmt(mu)}) into a {k} N/m spring. "
+        f"What is the maximum compression?",
+        f"{m} kg at {v} m/s, {fmt(d)} m to a {k} N/m spring, mu_k {fmt(mu)}: maximum compression.",
+    )
+
+
 def _spring_energy(rng: random.Random) -> Texts:
     m, k, x = pick(rng, [1, 2, 3]), pick(rng, [200, 400, 500]), pick(rng, [0.1, 0.15, 0.2])
     return (
@@ -319,6 +428,13 @@ CATEGORIES: dict[str, Callable[[random.Random], Texts]] = {
     "threshold force to start moving": _start_force,
     "threshold stretch to start sliding": _start_extension,
     "threshold angle to start sliding": _slip_angle,
+    "position as a function of time": _position_polynomial,
+    "deceleration that changes with time": _growing_deceleration,
+    "two projectiles compared": _two_projectiles,
+    "block pressed against a wall": _against_wall,
+    "largest value at rest": _largest_at_rest,
+    "rough then smooth floor": _rough_then_smooth,
+    "maximum spring compression": _max_compression,
     "energy method": _spring_energy,
     "momentum or collision": _collision,
     "rotation": _rotation,

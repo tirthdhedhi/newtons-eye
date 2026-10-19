@@ -171,3 +171,11 @@ def test_paraphrase_drift_filter():
         stretched, "Ignore air resistance. A 2 kg block on a spring, stretched 0.5 m."
     )
     assert drifted(stretched, "The 2 kg block bounces back from the wall after release.")
+
+
+def test_family_restricted_generation():
+    from parser_model.generate import make_problems
+
+    only = make_problems(20, 1, prefix="x", families=["unsupported", "partial"])
+    assert {p.family for _, p in only} <= {"unsupported", "partial"}
+    assert all(pid.startswith("x-") for pid, _ in only)

@@ -52,3 +52,13 @@ def test_vote_ignores_candidates_that_declared_more_than_they_wrote():
     full = json.dumps(scene(Q[:2], title="find: velocity, displacement"))
     assert candidate_key(short, schema, ok) is None
     assert candidate_key(full, schema, ok) is not None
+
+
+def test_unknown_asks_catch_things_the_solver_cannot_compute():
+    from parser_model.asks import KNOWN_ASKS, unknown_asks
+
+    assert all(ask_label(q).lower() in KNOWN_ASKS for q in Q)
+    refuses = scene(Q[:2], title="find: time of flight, separation, equilibrium")
+    assert unknown_asks(refuses) == ["separation", "equilibrium"]
+    assert unknown_asks(scene(Q[:2], title="find: velocity, time of flight")) == []
+    assert unknown_asks(scene(Q[:1])) == []  # no find line, nothing to judge
