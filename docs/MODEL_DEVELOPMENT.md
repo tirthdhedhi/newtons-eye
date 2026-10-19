@@ -183,7 +183,40 @@ candidate bug.
 
 Voting on top of v5 and the exported Ollama model: see `model/RESULTS.md`.
 
-## 9. File map
+## 9. A clean test, a safety net, the pipeline
+
+**Clean test.** The owner supplied 30 more, harder questions (numbers 31 to 60). They were scored on v5 before
+any change, so the number is clean: **25/30** (the one in-scope question right, 24 of 29 refusals). It is a mostly
+refusal test: vectors, two bodies meeting, calculus-defined motion, pulleys, contact forces, springs in series,
+thresholds, and circular motion are all out of scope today.
+
+**What the failures showed.** Five out-of-scope questions got a scene. In two of them the model's own `find:` line
+named the problem ("separation", "equilibrium"): it noticed the question wanted something the solver cannot
+compute, and wrote a scene anyway. That became a rule in plain code: if the declared asks include anything outside
+the solver's vocabulary, treat the answer as a refusal (24 to 26 of 29, no retraining). The other three
+(a cubic position function, deceleration growing with time, the largest extension at rest) look like ordinary asks,
+so they need training data.
+
+**New refusal categories (v6 data).** Position as a function of time, deceleration that changes with time, two
+projectiles compared, a block pressed against a wall, the largest value at rest, a rough then smooth floor, maximum
+spring compression, and thresholds to start moving or sliding. The refusal share of the training set was cut back to
+about 16% so the model does not start refusing in-scope questions.
+
+**App-side pipeline (`parser_model/pipeline.py`).** Question, model, checks, solver, explanation, with retries and
+intent labels. The model stays a narrow translator; reliability lives in code that can be tested. Details in
+`model/RESULTS.md`.
+
+Hiccup worth recording: one of the new files tripped the linter on long template strings (fixed with a per-file
+ignore for the refusal templates and wrapped lines elsewhere), and the pipeline's first draft wrote "Impact velocity
+at the instant of land" (reworded to "Impact velocity").
+
+## 10. v6 (in progress)
+
+v6 continues from v5 with 1,800 more iterations on 29,446 examples (refusals downsampled to about 16%), including
+1,800 new refusal-focused problems and 1,500 in-scope problems to keep the balance. Results will be added here and to
+`model/RESULTS.md`.
+
+## 11. File map
 
 | path                                                                                       | what it is                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

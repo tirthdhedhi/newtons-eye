@@ -188,3 +188,43 @@ Caveats: the owner's questions steered the data of v4 and v5, so 29/30 is optimi
 written by someone else is the next honest test. The remaining paraphrase-set misses (3 of 300) are one invalid
 JSON, one missing edge-time query, and one in-scope question refused; a fourth item has the right answer but
 uses a speed that is not stated in the question (flagged by the grounding check only).
+
+
+## A second batch of 30 harder questions (clean test), and the refusal safety net
+
+The project owner supplied 30 more, harder questions (numbers 31 to 60: vectors, relative motion, two bodies
+meeting, calculus-defined motion, pulleys, contact forces, springs in series and thresholds, circular motion).
+They were scored on v5 **before any change was made for them**, so this is a clean number. Only one question
+(39, a projectile from a cliff: range, time of flight, impact velocity) is clearly in scope; the other 29 should be
+refused. Question 43 (a block pressed against a wall by an oblique force) is treated as out of scope because the
+authoring layer has no natural way to write a vertical wall with an angled push.
+
+| setting | result |
+| --- | --- |
+| v5, greedy | **25 / 30**: the in-scope question fully right, 24 of 29 refusals |
+| v5 + "unknown ask" safety net (no retraining) | 26 of 29 refusals |
+
+v5 answered five out-of-scope questions with a scene: 38 (position as a cubic polynomial), 40 (two stones,
+separation), 41 (deceleration that grows with time), 43 (block against a wall), 54 (largest extension at rest).
+For 40 and 43 the model's own `find:` line already listed "separation" and "equilibrium", things the solver has no
+query for; a scene whose declared asks fall outside the solver's vocabulary is now treated as a refusal
+(`asks.unknown_asks`, used by the pipeline). The three that remain (38, 41, 54) look like valid asks to the model,
+so they need training data: v6 adds refusal categories for position as a function of time, deceleration that
+changes with time, two projectiles compared, a block pressed against a wall, the largest value at rest, rough then
+smooth floors, and maximum spring compression, written in my own wording. After this change the batch is a
+*development* set too; a third fresh batch is needed for the next clean number.
+
+## Using the model: the pipeline
+
+`parser_model.pipeline.answer_question(client, question)` (CLI: `python -m parser_model.pipeline "<question>"`)
+runs model, checks, solver and explanation, and returns `answered`, `unsupported`, `not_physics` or `failed`:
+
+* refusals from the model, or scenes that declare asks outside the solver's vocabulary, become `unsupported`
+  (or `not_physics`);
+* invalid JSON, schema errors, solver errors, or a scene with fewer queries than its `find:` line are retried
+  (greedy, then sampled at temperature 0.7);
+* an answer is explained in words, with the assumptions the solver made (default mass, default shape) listed.
+
+Live run against the Ollama v5 model: the car question gives "Velocity at t = 8 s: 44 m/s, Position at t = 8 s:
+256 m", the projectile question gives "Time of flight: 4.677 s, Range: 153.3 m, Maximum height: 26.83 m" (all
+matching the closed forms), circular motion is `unsupported`, and "capital of France" is `not_physics`.
