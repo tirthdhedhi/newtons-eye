@@ -126,3 +126,14 @@ def test_missing_time_means_zero():
     base = {"ask": "acceleration", "body": "b"}
     assert query_signature(base) == query_signature({**base, "at": 0})
     assert query_signature(base) != query_signature({**base, "at": 1})
+
+
+def test_bodies_without_a_mass_are_matched_by_position_not_by_id():
+    gold = scene({"id": "v", "ask": "velocity", "body": "car", "at": 8}, bodies=[{"id": "car"}])
+    model = scene({"id": "x", "ask": "velocity", "body": "body", "at": 8}, bodies=[{"id": "body"}])
+    assert list(signatures(gold).values()) == list(signatures(model).values())
+    two = [{"id": "a"}, {"id": "b"}]
+    q = lambda body: {"id": "v", "ask": "velocity", "body": body, "at": 1}  # noqa: E731
+    first = scene(q("a"), bodies=two)
+    swapped = scene(q("b"), bodies=two)
+    assert list(signatures(first).values()) != list(signatures(swapped).values())

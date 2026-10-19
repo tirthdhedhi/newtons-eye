@@ -9,7 +9,8 @@ solver_match  the solver's answers equal the gold scene's, query by query, match
 
 A signature is ``(ask, body, force, connection, until, at, from, to)``. ``connection`` and
 ``from``/``to`` are added to the signature so tension and work queries stay distinct. Bodies are
-named by mass (SI) when the scene gives one, so ``"box"`` and ``"block"`` are the same body; a
+named by mass (SI) when the scene gives one, else by their position in the list, so ``"box"`` and
+``"block"`` are the same body (and so are ``"car"`` and ``"body"`` when neither has a mass); a
 connection is named by the masses of the bodies it joins. Quantity strings are converted to SI.
 """
 
@@ -60,11 +61,12 @@ def _canon(value: Any) -> Any:
 
 
 def _body_names(scene: dict[str, Any]) -> dict[str, Any]:
+    """Body id -> a name that does not depend on the id: its mass, else its position in the list."""
     names: dict[str, Any] = {}
-    for body in scene.get("bodies") or []:
+    for index, body in enumerate(scene.get("bodies") or []):
         if isinstance(body, dict) and "id" in body:
             mass = _si(body.get("mass"))
-            names[body["id"]] = mass if isinstance(mass, float) else body["id"]
+            names[body["id"]] = mass if isinstance(mass, float) else f"#{index}"
     return names
 
 
