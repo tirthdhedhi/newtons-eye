@@ -1,0 +1,43 @@
+{
+  "version": 1.1,
+  "title": "A car passes a police car at 30 m/s; the police car starts from rest 3 s later at 5 m/s^2: when and where do they meet?",
+  "bodies": [
+    {
+      "id": "car",
+      "velocity": {
+        "speed": "30 m/s",
+        "angle": "0 deg"
+      },
+      "constantAcceleration": "0 m/s^2"
+    },
+    {
+      "id": "police",
+      "constantAcceleration": "5 m/s^2"
+    }
+  ],
+  "events": [
+    {
+      "id": "go",
+      "at": "3 s",
+      "kind": "release",
+      "target": "police"
+    }
+  ],
+  "queries": [
+    {
+      "id": "t",
+      "ask": "time",
+      "until": {
+        "event": "meet"
+      }
+    },
+    {
+      "id": "x",
+      "ask": "position",
+      "body": "police",
+      "at": {
+        "event": "meet"
+      }
+    }
+  ]
+}

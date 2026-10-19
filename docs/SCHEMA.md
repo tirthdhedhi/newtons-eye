@@ -19,6 +19,10 @@ Source of truth: `packages/core/src/schema`. Scene JSON holds only givens.
     (time of flight). `velocity`/`position`/`acceleration` with `at: { event: "land" }` read the instant _before_
     the impact. Give a projectile `"shape": { "kind": "point" }` so it lands when its centre reaches the plane
     (the default authoring box lands 0.1 m early).
+  - `time` `until: { event: "meet" }` (optional `body` and `with`): when two bodies reach the same place, i.e. their
+    separation along the initial line between them reaches zero (exact for motion along that line). Positions at
+    `at: { event: "meet" }` work for either body. A body held until a `release` event can start the chase later
+    ("the police car starts from rest 3 s later"); `constantAcceleration: "0 m/s^2"` keeps the car moving steadily.
   - `max_height`: highest point before landing (or the end of the simulation). `above: "ground"` (default) is
     the height above the body's contact plane, `above: "start"` the height above the starting position.
   - `range`: horizontal distance from the starting position to the landing point. Errors if the body never lands.

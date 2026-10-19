@@ -1490,6 +1490,7 @@
                       "stop",
                       "edge",
                       "land",
+                      "meet",
                       "slack",
                       "slide_start"
                     ]
@@ -1501,6 +1502,10 @@
                 "additionalProperties": false
               },
               "body": {
+                "type": "string",
+                "minLength": 1
+              },
+              "with": {
                 "type": "string",
                 "minLength": 1
               }

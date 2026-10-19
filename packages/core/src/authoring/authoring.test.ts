@@ -23,6 +23,7 @@ const EXPRESSIBLE = [
   "projectile-flight",
   "building-throw",
   "car-accelerates",
+  "police-chase",
   "sliding-stop",
   "spring-block",
 ];

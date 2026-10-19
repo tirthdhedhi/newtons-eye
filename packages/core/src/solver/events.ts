@@ -1,4 +1,4 @@
-import { dot, len, scale, unit } from "../math/vec3";
+import { dot, len, scale, sub, unit } from "../math/vec3";
 import { solveInstant } from "./instant";
 import {
   EPS_DIST,
@@ -20,6 +20,8 @@ export interface Candidate {
   kind: EventKind;
   contact?: number;
   string?: number;
+  /** For `meet`: indices of the two bodies. */
+  pair?: [number, number];
   /** Latches to true once the opposite condition has been seen (avoids re-firing at t0). */
   armed: boolean;
   arm(t: number, s: State): boolean;
@@ -102,6 +104,22 @@ export function buildCandidates(
       }
     }
   });
+  // Two bodies meet when their separation along the initial line between them reaches zero.
+  for (let i = 0; i < m.ids.length; i++) {
+    for (let j = i + 1; j < m.ids.length; j++) {
+      const rel0 = sub(get(start.x, i), get(start.x, j));
+      if (len(rel0) < EPS_DIST) continue;
+      const e = unit(rel0);
+      const along = (s: State) => dot(sub(get(s.x, i), get(s.x, j)), e);
+      out.push({
+        kind: "meet",
+        pair: [i, j],
+        armed: along(start) > EPS_DIST,
+        arm: (_t, s) => along(s) > EPS_DIST,
+        test: (_t, s) => along(s) <= 0,
+      });
+    }
+  }
   m.strings.forEach((st, j) => {
     const mode = get(reg.strings, j);
     if (mode === "cut") return;

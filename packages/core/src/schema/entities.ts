@@ -159,8 +159,12 @@ export const Query = z.union([
   z.strictObject({
     id: Id,
     ask: z.literal("time"),
-    until: z.strictObject({ event: z.enum(["stop", "edge", "land", "slack", "slide_start"]) }),
+    until: z.strictObject({
+      event: z.enum(["stop", "edge", "land", "meet", "slack", "slide_start"]),
+    }),
     body: Id.optional(),
+    /** For `meet`: the other body. */
+    with: Id.optional(),
   }),
   z.strictObject({
     id: Id,

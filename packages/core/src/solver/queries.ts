@@ -44,7 +44,9 @@ function resolveTime(
   const user = tl.model.scene.events.find((e) => e.id === ref);
   if (user) return user.at;
   const ev = tl.events.find(
-    (e) => e.kind === ref && (bodyId === undefined || e.body === undefined || e.body === bodyId),
+    (e) =>
+      e.kind === ref &&
+      (bodyId === undefined || e.body === undefined || e.body === bodyId || e.other === bodyId),
   );
   if (!ev) return null;
   // A query "at the landing" means the instant before the impact, not the body at rest after it.
@@ -59,9 +61,14 @@ export function evaluateQuery(tl: Timeline, q: Query): Answer {
 
   if (q.ask === "time") {
     const kind = q.until.event;
-    const ev = tl.events.find(
-      (e) => e.kind === kind && (q.body === undefined || e.body === undefined || e.body === q.body),
-    );
+    const ev = tl.events.find((e) => {
+      if (e.kind !== kind) return false;
+      if (kind === "meet") {
+        const pair = [q.body, q.with].filter((x): x is string => x !== undefined);
+        return pair.every((id) => e.body === id || e.other === id);
+      }
+      return q.body === undefined || e.body === undefined || e.body === q.body;
+    });
     return ev
       ? { id: q.id, ask: q.ask, value: ev.t, unit }
       : fail(`"${kind}" never happens within ${tl.duration} s`);
