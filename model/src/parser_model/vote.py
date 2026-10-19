@@ -15,6 +15,7 @@ from typing import Any
 
 import jsonschema
 
+from .asks import asks_complete
 from .infer import ChatClient
 from .metrics import Solver, parse_scene, signatures
 
@@ -37,6 +38,8 @@ def candidate_key(raw: str, schema: dict[str, Any], solver: Solver) -> str | Non
     if set(scene) == {"unsupported"} and isinstance(scene["unsupported"], str):
         return "REFUSE"
     if not jsonschema.Draft202012Validator(schema).is_valid(scene):
+        return None
+    if not asks_complete(scene):  # declared more things than it wrote queries for
         return None
     solved = solver(scene)
     if not solved.ok or solved.answers is None:

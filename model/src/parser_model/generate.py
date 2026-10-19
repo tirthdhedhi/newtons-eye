@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from . import unsupported
+from .asks import with_title
 from .phrasing import (
     BALL_WORDS,
     BODY_WORDS,
@@ -69,7 +70,9 @@ def mass_or_none(m: float, rng: random.Random, p_omit: float = 0.55) -> tuple[st
 
 
 def pick_queries(rng: random.Random, names: list[str], low: int = 1) -> list[str]:
-    k = rng.randint(low, len(names))
+    """A random subset of ``names`` in canonical order, biased toward asking for several things."""
+    sizes = list(range(low, len(names) + 1))
+    k = rng.choices(sizes, weights=[1 + 2 * (n - low) for n in sizes])[0]
     chosen = rng.sample(names, k)
     return [n for n in names if n in chosen]
 
@@ -171,6 +174,8 @@ def finish(
 ) -> dict[str, str]:
     """The three styled questions from per-style givens and the (shared) ask phrases."""
     terse = terse.strip()
+    if len(asks) > 1 and rng.random() < 0.4:
+        asks = rng.sample(asks, len(asks))  # the question need not follow the scene's query order
     return {
         "textbook": assemble(rng, givens["textbook"], textbook_ask(rng, asks, when), word),
         "casual": assemble(rng, givens["casual"], casual_ask(rng, asks, when), word),
@@ -1396,6 +1401,8 @@ def make_problems(n: int, seed: int) -> list[tuple[str, Problem]]:
     while len(out) < n:
         family = pick(rng, names)
         problem = FAMILIES[family](rng)
+        if "unsupported" not in problem.scene:
+            problem.scene = with_title(problem.scene)
         key = json.dumps(problem.scene, sort_keys=True) + problem.questions["textbook"]
         if key in seen:
             continue
