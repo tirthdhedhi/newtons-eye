@@ -35,18 +35,22 @@ Rules that held the whole way through:
 
 ## 3. Results at a glance (`solver_match`)
 
-| model                                       | seed (21) | hard (15) | paraphrases (300) | held-out generated | owner's 30 questions |
-| ------------------------------------------- | --------- | --------- | ----------------- | ------------------ | -------------------- |
-| untuned 7B, best baseline                   | 9         | n/a       | n/a               | n/a                | n/a                  |
-| v1 (3B, 6 families)                         | 14        | 11        | n/a               | 150/150            | n/a                  |
-| v2 (3B, 8 families, varied wording)         | 21        | 15        | 292               | 300/300            | n/a                  |
-| v2 7B                                       | 21        | 14        | 291               | 150/150            | n/a                  |
-| v3 (3B, wider scope, refusals)              | 21        | 14        | 287               | 297/300            | 20/30                |
-| **v4 (3B, more wording, partial refusals)** | 21        | 14        | **295**           | **300/300**        | **25/30**            |
+| model                                             | seed (21) | hard (15) | paraphrases (300) | held-out generated | owner's 30 questions |
+| ------------------------------------------------- | --------- | --------- | ----------------- | ------------------ | -------------------- |
+| untuned 7B, best baseline                         | 9         | n/a       | n/a               | n/a                | n/a                  |
+| v1 (3B, 6 families)                               | 14        | 11        | n/a               | 150/150            | n/a                  |
+| v2 (3B, 8 families, varied wording)               | 21        | 15        | 292               | 300/300            | n/a                  |
+| v2 7B                                             | 21        | 14        | 291               | 150/150            | n/a                  |
+| v3 (3B, wider scope, refusals)                    | 21        | 14        | 287               | 297/300            | 22/30                |
+| v4 (3B, more wording, partial refusals)           | 21        | 14        | 295               | 300/300            | 28/30                |
+| **v5 (v4 + the `find:` line and multi-ask data)** | **21**    | **15**    | **297**           | **300/300**        | **29/30**            |
+
+The "owner's 30 questions" column uses the corrected scoring (section 4, "answer matching"): the
+numbers first reported were 20, 25 and 26 for v3, v4 and v5.
 
 Choice: the **3B** model. It ties the 7B on everything, trains and runs about 2.5 times faster, needs no
-float32 workaround, and exports to a 3 GB file. Caveat: the owner's 30 questions steered v4's data, so 25/30
-is optimistic.
+float32 workaround, and exports to a 3 GB file. Caveat: the owner's 30 questions steered the data of
+v4 and v5, so 29/30 is optimistic; a fresh set is needed for a clean number.
 
 ## 4. Problems and fixes, in the order they happened
 
@@ -120,12 +124,15 @@ is optimistic.
 
 ### Export and inference
 
-| problem                                      | cause                                                                                                                                                 | fix                                                                                                                                 |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Ollama could not import the model            | its safetensors importer does not support Qwen2, and `q8_0` is not an accepted quantization                                                           | `mlx_lm.fuse --dequantize`, then llama.cpp `convert_hf_to_gguf.py` and `llama-quantize` to Q8_0, then `ollama create` from the GGUF |
-| the converter crashed                        | `extra_special_tokens` was a list in the fused tokenizer config                                                                                       | removed it before converting                                                                                                        |
-| constrained decoding made things worse       | a grammar that allows a scene or a refusal made the model refuse 10 in-scope questions; a scene-only grammar scored 0/10 because queries were dropped | not used; the exported model's plain output matched MLX exactly (20/30), so the export is faithful                                  |
-| the model sometimes drops or invents a query | a small model under-attends to the second and third ask; samples make the same slip                                                                   | self-consistency voting (`--vote K`) gave 20 to 22 of 30; the real fix is in section 8                                              |
+| problem                                      | cause                                                                                                                                                                       | fix                                                                                                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ollama could not import the model            | its safetensors importer does not support Qwen2, and `q8_0` is not an accepted quantization                                                                                 | `mlx_lm.fuse --dequantize`, then llama.cpp `convert_hf_to_gguf.py` and `llama-quantize` to Q8_0, then `ollama create` from the GGUF                                                                                  |
+| the converter crashed                        | `extra_special_tokens` was a list in the fused tokenizer config                                                                                                             | removed it before converting                                                                                                                                                                                         |
+| constrained decoding made things worse       | a grammar that allows a scene or a refusal made the model refuse 10 in-scope questions; a scene-only grammar scored 0/10 because queries were dropped                       | not used; the exported model's plain output matched MLX exactly (20/30), so the export is faithful                                                                                                                   |
+| the model sometimes drops or invents a query | a small model under-attends to the second and third ask; samples make the same slip                                                                                         | self-consistency voting (`--vote K`) gave 20 to 22 of 30; the real fix is in section 8                                                                                                                               |
+| correct scenes were scored as failures       | with mass optional, a body has no mass to name it by, so the answer matching fell back to the body id and treated the gold `car` and the model's `body` as different bodies | bodies without a mass are matched by position in the list; the owner's 30 questions went from 20/25/26 to 22/28/29 for v3/v4/v5, and the three items I had called "dropped queries" (u5, u8, u10) were never dropped |
+| Hugging Face cache folders vanished mid-run  | the model snapshot folders were removed while the machine was unattended; the large weight files remained                                                                   | re-ran `snapshot_download` for the 3B base (the small files fetch in seconds and the weights are reused)                                                                                                             |
+| unclear which Ollama blobs could go          | the cache holds only `sha256-...` file names                                                                                                                                | read Ollama's manifests to map each blob to its model; always remove with `ollama rm`, never by deleting blobs                                                                                                       |
 
 ## 5. Solver extension (TypeScript)
 
@@ -143,21 +150,38 @@ example pairs, updated `docs/SCHEMA.md` and `schema/authoring.schema.json`.
 - When a metric flags something, check whether the metric is wrong (grounding was, twice) before blaming the model.
 - Saturated tests stop discriminating. When three models tie, build a harder test, not a bigger model.
 - A refusal path matters as much as accuracy: a confident wrong answer is the worst failure for a tutor.
+- Inspect real outputs before designing a fix, and re-score old runs when a metric bug is found: three earlier
+  conclusions (dropped queries, the v3 and v4 numbers) were wrong because of one matching rule.
 
 ## 7. Open limits
 
 - Only about a third of textbook problems are expressible: no vectors, circular motion, pulleys, connected bodies,
   relative motion, series or parallel springs, energy methods, collisions, or inverse problems.
-- The model sometimes drops a query it was asked for (v4 on the owner's 30 questions: three misses, all drops).
+- On the owner's 30 questions v5 gets all 10 in-scope questions right and refuses 19 of 20 out-of-scope ones; the
+  one miss (a "minimum stretch to start sliding" question) is now covered by new refusal categories that are not
+  trained yet.
+- A true dropped query still shows up occasionally on the paraphrase set (3 misses of 300 for v5).
 - The owner's 30 questions are a development set; a fresh set is needed for a clean number.
 - Training used about 3 hours per version on a 16 GB Mac; there is no cloud route that is both free and fast enough.
 
-## 8. The dropped-query fix (in progress)
+## 8. The dropped-query fix (v5)
 
-Plan, three parts: (1) a completeness check that compares the question's wording with the scene's queries and
-resamples when an ask is missing; (2) a `"title": "find: ..."` line the model writes before the scene, so the asks
-are listed before they are encoded; (3) more training questions with three or four asks in odd orders.
-Results will be added here and to `model/RESULTS.md`.
+Diagnosis at the time: every in-scope miss on the owner's questions was a missing query (u5, u8, u10 looked like
+a dropped velocity or time-of-flight query). Fix, three parts: (1) a `"title": "find: ..."` line the model writes
+before the scene, listing every quantity asked; (2) a completeness check, so a scene that declares more things than
+it queries loses the vote (`--vote K`); (3) more training questions with three to five asks, in shuffled order
+(4,000 new verified problems). v5 was trained from the v4 weights on 22,492 examples.
+
+What actually happened: v5 improved a little (owner's questions 28 to 29, hard set 14 to 15, paraphrases 295 to
+297), but when its outputs for u5, u8 and u10 were inspected they were **complete and right**; those three had been
+scored as failures by the body-id bug in section 4. The biggest single gain on the dev set came from fixing the
+metric, not from the model change.
+
+Lessons: look at the actual outputs before designing a fix (the `find:` line was built on a wrong diagnosis, and it
+still helped, but not for the reason assumed); a metric that disagrees with your reading of the output is a
+candidate bug.
+
+Voting on top of v5 and the exported Ollama model: see `model/RESULTS.md`.
 
 ## 9. File map
 

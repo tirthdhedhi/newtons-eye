@@ -145,3 +145,45 @@ overnight scoring on a battery-powered Mac; use `caffeinate` for long runs.
 3. A fresh, never-tuned test set written by someone else.
 4. App-side pipeline (validate, solve, explain, retry, intent labels) around the model.
 5. Widen the solver: relative motion, pulleys, series/parallel springs, circular motion.
+
+
+## Correction: scoring bug that understated the owner's-question numbers
+
+Bodies without a mass were matched by id, so a gold `car` and a model `body` counted as different bodies and correct
+scenes scored as failures. With the fix (bodies without a mass are matched by position) the same saved outputs score:
+
+| run | first reported | corrected |
+| --- | --- | --- |
+| v3, greedy | 20 / 30 | **22 / 30** |
+| v3 + voting (greedy + 6 samples) | 22 / 30 | **25 / 30** |
+| v4, greedy | 25 / 30 | **28 / 30** |
+| v5, greedy | 26 / 30 | **29 / 30** |
+
+The items u5, u8 and u10, which I had described as "dropped queries", were complete and right. The seed, hard,
+paraphrase and held-out sets were not affected (their bodies carry a mass or share ids with the gold scene).
+
+## v5 (the `find:` line, completeness check, multi-ask data): current best
+
+The model writes `"title": "find: <every quantity asked>"` first and then one query per item; a scene that declares
+more than it queries loses the vote. Trained 2,500 more iterations from the v4 weights on 22,492 examples (4,000 new
+verified problems with three to five asks in shuffled order, the retitled v4 data, 1,400 paraphrases), validation
+loss 0.066.
+
+| test | v2 | v3 | v4 | **v5** |
+| --- | --- | --- | --- | --- |
+| seed set (21) | 21 | 21 | 21 | **21** |
+| hard set (15) | 15 | 14 | 14 | **15** |
+| paraphrases of held-out problems (300) | 292 | 287 | 295 | **297 (99.0%)** |
+| held-out generated, 13 families (300) | n/a | 297 | 300 | **300** |
+| owner's 30 questions (corrected) | n/a | 22 | 28 | **29** |
+
+On the 30 questions v5 gets all 10 in-scope questions right and refuses 19 of 20 out-of-scope ones. The one miss
+is u23 ("minimum extension required to start the block moving"): it answers with a scene, in every sample. Refusal
+categories for thresholds to start moving or sliding were added afterwards and are not trained yet.
+
+Exported to Ollama as `newtons-eye-3b-v5` (Q8_0, 3.3 GB, system prompt baked in): greedy 29/30, the same as MLX, and
+voting (`--vote 6`) also 29/30, so the model is already consistent and voting adds nothing here.
+
+Caveats: the owner's questions steered the data of v4 and v5, so 29/30 is optimistic. A fresh set of questions
+written by someone else is the next honest test. The remaining paraphrase-set misses (3 of 300) are one invalid
+JSON, one wrong value, and one missing edge-time query.
