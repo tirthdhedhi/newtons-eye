@@ -29,6 +29,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # long natural-language templates
 "src/parser_model/unsupported.py" = ["E501"]
+"src/parser_model/generate.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

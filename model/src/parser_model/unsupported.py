@@ -66,22 +66,6 @@ def _river(rng: random.Random) -> Texts:
     )
 
 
-def _overtake(rng: random.Random) -> Texts:
-    va, vb, gap, acc = (
-        pick(rng, [20, 25, 30]),
-        pick(rng, [10, 15, 18]),
-        pick(rng, [50, 80, 100]),
-        pick(rng, [1, 2, 3]),
-    )
-    return (
-        f"Car A drives at a constant {va} m/s. Car B starts {gap} m behind it at {vb} m/s and speeds up at "
-        f"{acc} m/s^2. When and where does B catch A?",
-        f"One car is cruising at {va} m/s. Another is {gap} m back doing {vb} m/s and accelerating at "
-        f"{acc} m/s^2. When does the second one catch up?",
-        f"A: {va} m/s constant. B: {gap} m behind, {vb} m/s, a = {acc} m/s^2. Catch-up time and place?",
-    )
-
-
 def _atwood(rng: random.Random) -> Texts:
     a, b = pick(rng, [2, 3, 4]), pick(rng, [5, 6, 8])
     return (
@@ -411,7 +395,6 @@ CATEGORIES: dict[str, Callable[[random.Random], Texts]] = {
     "vector displacement": _displacements,
     "dot or cross product": _dot_cross,
     "relative motion": _river,
-    "two bodies meeting": _overtake,
     "pulley or connected bodies": _atwood,
     "apparent weight": _elevator,
     "connected bodies": _connected,

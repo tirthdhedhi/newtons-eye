@@ -35,9 +35,15 @@ def ask_label(q: dict[str, Any]) -> str:
             "edge": "time to reach the edge",
             "slack": "time until the string goes slack",
             "slide_start": "time until it starts to slide",
+            "meet": "time until they meet",
         }.get(event, "time")
+    meeting = isinstance(at, dict) and at.get("event") == "meet"
     if ask == "velocity":
-        return "impact velocity" if landing else "velocity"
+        return (
+            "impact velocity" if landing else ("velocity when they meet" if meeting else "velocity")
+        )
+    if ask == "position" and meeting:
+        return "position where they meet"
     if ask == "max_height":
         return "maximum height"
     if ask == "min_mu_s":
@@ -101,6 +107,9 @@ KNOWN_ASKS = frozenset(
         "time to reach the edge",
         "time until the string goes slack",
         "time until it starts to slide",
+        "time until they meet",
+        "velocity when they meet",
+        "position where they meet",
         "time",
         "velocity",
         "impact velocity",

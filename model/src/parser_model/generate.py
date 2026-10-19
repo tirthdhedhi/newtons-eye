@@ -1292,6 +1292,198 @@ def kinematics(rng: random.Random) -> Problem:
     return Problem("kinematics", questions, scene, expected, compare)
 
 
+# --- two bodies meeting ---------------------------------------------------------------------------
+
+LEADERS = ["car", "truck", "motorcycle", "cyclist", "train"]
+CHASERS = ["police car", "patrol car", "bus", "second car", "scooter"]
+
+
+def _slug(word: str) -> str:
+    return word.replace(" ", "_")
+
+
+def chase(rng: random.Random) -> Problem:
+    kind = pick(rng, ["pursuit", "pursuit", "head_on", "vertical"])
+    if kind == "pursuit":
+        while True:  # the meeting must happen inside the 60 s default window
+            v1 = pick(rng, [10, 15, 20, 25, 30])
+            a = pick(rng, [1, 2, 3, 4, 5])
+            d = pick(rng, [0, 2, 3, 4, 5])
+            tau = (v1 + math.sqrt(v1 * v1 + 2 * a * v1 * d)) / a
+            t_meet = d + tau
+            if t_meet < 50:
+                break
+        lead, chaser = pick(rng, LEADERS), pick(rng, CHASERS)
+        v_text, v_scene = speed(v1, rng)
+        scene: dict[str, Any] = {
+            "version": 1.1,
+            "bodies": [
+                {
+                    "id": _slug(lead),
+                    "velocity": {"speed": v_scene, "angle": "0 deg"},
+                    "constantAcceleration": "0 m/s^2",
+                },
+                {"id": _slug(chaser), "constantAcceleration": f"{fmt(a)} m/s^2"},
+            ],
+            "queries": [],
+        }
+        if d:
+            scene["events"] = [
+                {"id": "go", "at": f"{d} s", "kind": "release", "target": _slug(chaser)}
+            ]
+        names = pick_queries(rng, ["T", "X", "V"])
+        for n in names:
+            if n == "T":
+                scene["queries"].append({"id": "T", "ask": "time", "until": {"event": "meet"}})
+            elif n == "X":
+                scene["queries"].append(query("X", "position", _slug(chaser), at={"event": "meet"}))
+            else:
+                scene["queries"].append(query("V", "velocity", _slug(chaser), at={"event": "meet"}))
+        values = {"T": t_meet, "X": v1 * t_meet, "V": [a * tau, 0, 0]}
+        expected = {n: ([v1 * t_meet, 0, 0] if n == "X" else values[n]) for n in names}
+        compare = {"T": "value", "X": "x", "V": "x"}
+        ask_words = {
+            "T": [
+                "how long after the {a} passes the {b} start that they meet",
+                "when the {b} catches up with the {a}",
+                "the time at which the {b} overtakes the {a}",
+            ],
+            "X": [
+                "how far from the starting point they meet",
+                "where the {b} catches the {a} (its position)",
+                "the distance from the start at which the {b} catches up",
+            ],
+            "V": [
+                "the speed of the {b} when it catches the {a}",
+                "how fast the {b} is going at that moment (its velocity)",
+            ],
+        }
+        asks = [pick(rng, ask_words[n]).format(a=lead, b=chaser) for n in names]
+        delay = f" {d} seconds later" if d else " at the same moment"
+        base_t = (
+            f"A {lead} passes a {chaser} that is standing still, at a constant {v_text}. The {chaser} "
+            f"sets off from rest{delay}, accelerating uniformly at {fmt(a)} m/s^2."
+        )
+        base_c = (
+            f"A {lead} goes past a parked {chaser} at {v_text} and keeps that speed. The {chaser} "
+            f"starts{delay} and speeds up at {fmt(a)} m/s^2."
+        )
+        terse = (
+            f"{lead} at {v_text} constant passes a {chaser} at rest; the {chaser} starts{delay}, "
+            f"a = {fmt(a)} m/s^2."
+        )
+        givens = {"textbook": [base_t], "casual": [base_c]}
+        word = lead
+    elif kind == "head_on":
+        v1, v2 = pick(rng, [10, 15, 20, 25]), pick(rng, [8, 12, 16, 20])
+        dist = pick(rng, [100, 200, 300, 500, 1000])
+        t_meet = dist / (v1 + v2)
+        lead, chaser = pick(rng, LEADERS), pick(rng, CHASERS)
+        v1_text, v1_scene = speed(v1, rng)
+        v2_text, v2_scene = speed(v2, rng)
+        d_text, d_scene = distance(dist, rng, cm_ok=False)
+        scene = {
+            "version": 1.1,
+            "bodies": [
+                {
+                    "id": _slug(lead),
+                    "velocity": {"speed": v1_scene, "angle": "0 deg"},
+                    "constantAcceleration": "0 m/s^2",
+                },
+                {
+                    "id": _slug(chaser),
+                    "position": [dist, 0, 0],
+                    "velocity": {"speed": v2_scene, "angle": "180 deg"},
+                    "constantAcceleration": "0 m/s^2",
+                },
+            ],
+            "queries": [],
+        }
+        names = pick_queries(rng, ["T", "X"])
+        for n in names:
+            if n == "T":
+                scene["queries"].append({"id": "T", "ask": "time", "until": {"event": "meet"}})
+            else:
+                scene["queries"].append(query("X", "position", _slug(lead), at={"event": "meet"}))
+        values = {"T": t_meet, "X": [v1 * t_meet, 0, 0]}
+        expected = {n: values[n] for n in names}
+        compare = {"T": "value", "X": "x"}
+        ask_words = {
+            "T": [
+                "how long until they meet",
+                "the time at which they meet",
+                "when they pass each other",
+            ],
+            "X": [
+                "how far from the {a}'s starting point they meet",
+                "where they meet, measured from the {a}'s start",
+            ],
+        }
+        asks = [pick(rng, ask_words[n]).format(a=lead) for n in names]
+        base_t = (
+            f"A {lead} and a {chaser} start {d_text} apart and drive toward each other along a straight "
+            f"road, the {lead} at {v1_text} and the {chaser} at {v2_text}, both at constant speed."
+        )
+        base_c = (
+            f"A {lead} and a {chaser} are {d_text} apart on a straight road, driving toward each other: "
+            f"the {lead} at {v1_text}, the {chaser} at {v2_text}."
+        )
+        terse = (
+            f"{lead} {v1_text} and {chaser} {v2_text}, {d_text} apart, head-on, constant speeds."
+        )
+        givens = {"textbook": [base_t], "casual": [base_c]}
+        word = lead
+    else:  # vertical: one ball thrown up from the ground, one dropped from a height
+        u = pick(rng, [15, 20, 25, 30])
+        h = pick(rng, [30, 40, 50, 60, 80])
+        t_meet = h / u
+        t_flight = 2 * u / G
+        if t_meet >= t_flight:  # they must meet before the first ball is back down
+            h = round(u * t_flight * 0.5 / 5) * 5 or 5
+            t_meet = h / u
+        y = u * t_meet - 0.5 * G * t_meet**2
+        scene = {
+            "version": 1.1,
+            "bodies": [
+                {"id": "thrown", "velocity": {"speed": f"{u} m/s", "angle": "90 deg"}},
+                {"id": "dropped", "position": [0, h, 0]},
+            ],
+            "queries": [],
+        }
+        names = pick_queries(rng, ["T", "Y"])
+        for n in names:
+            if n == "T":
+                scene["queries"].append({"id": "T", "ask": "time", "until": {"event": "meet"}})
+            else:
+                scene["queries"].append(query("Y", "position", "thrown", at={"event": "meet"}))
+        values = {"T": t_meet, "Y": [0, y, 0]}
+        expected = {n: values[n] for n in names}
+        compare = {"T": "value", "Y": "xy"}
+        ask_words = {
+            "T": ["how long until the balls meet", "the time at which they meet", "when they pass"],
+            "Y": [
+                "the height at which they meet",
+                "how high above the ground they meet (their position)",
+            ],
+        }
+        asks = [pick(rng, ask_words[n]) for n in names]
+        base_t = (
+            f"One ball is thrown straight up from the ground at {u} m/s. At the same moment a second ball is "
+            f"dropped from rest from a height of {h} m directly above the first. Neglect air resistance."
+        )
+        base_c = (
+            f"I toss a ball straight up at {u} m/s from the ground and, at that same instant, let another "
+            f"one fall from {h} m right above it. No air resistance."
+        )
+        terse = f"Ball 1 up at {u} m/s from ground, ball 2 dropped from {h} m at the same time, no drag."
+        givens = {"textbook": [base_t], "casual": [base_c]}
+        word = "ball"
+    when = None
+    return Problem(
+        "chase", finish(rng, word, givens, terse, asks, when, None), scene, expected, compare
+    )
+
+
 def unsupported_problem(rng: random.Random) -> Problem:
     """A question outside the solver's scope; the target output is a refusal, not a scene."""
     category, questions = unsupported.make(rng)
@@ -1334,6 +1526,7 @@ FAMILIES: dict[str, Callable[[random.Random], Problem]] = {
     "flight": flight,
     "spring-release": spring_release,
     "kinematics": kinematics,
+    "chase": chase,
     "unsupported": unsupported_problem,
     "partial": partial_problem,
 }
@@ -1349,6 +1542,7 @@ WEIGHTS = {
     "flight": 5,
     "spring-release": 2,
     "kinematics": 4,
+    "chase": 4,
     "unsupported": 4,
     "partial": 2,
 }
