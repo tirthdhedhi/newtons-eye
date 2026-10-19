@@ -218,6 +218,39 @@ def _inverse_mu(rng: random.Random) -> Texts:
     )
 
 
+def _start_force(rng: random.Random) -> Texts:
+    m, mu = pick(rng, [2, 5, 10, 20]), pick(rng, [0.3, 0.4, 0.5, 0.6])
+    return (
+        f"A {m} kg crate rests on a horizontal floor with a static friction coefficient of {fmt(mu)}. "
+        f"What is the smallest horizontal force that will make it start to move?",
+        f"How hard do I have to push a {m} kg box before it budges? The floor's static friction "
+        f"coefficient is {fmt(mu)}.",
+        f"{m} kg on a floor, mu_s = {fmt(mu)}: minimum force to start it moving.",
+    )
+
+
+def _start_extension(rng: random.Random) -> Texts:
+    m, k, mu = pick(rng, [1, 2, 3]), pick(rng, [50, 100, 200]), pick(rng, [0.3, 0.4, 0.5])
+    return (
+        f"A {m} kg block is attached to a spring of constant {k} N/m on a horizontal surface where the "
+        f"coefficient of static friction is {fmt(mu)}. The spring is stretched slowly. How far must it be "
+        f"stretched before the block begins to slide?",
+        f"I'm slowly pulling a {m} kg block with a {k} N/m spring across a table (mu_s = {fmt(mu)}). "
+        f"At what stretch does it start to slip?",
+        f"{m} kg, spring {k} N/m, mu_s {fmt(mu)}: stretch at which it starts sliding?",
+    )
+
+
+def _slip_angle(rng: random.Random) -> Texts:
+    m, mu = pick(rng, [1, 2, 5, 8]), pick(rng, [0.3, 0.5, 0.6, 0.8])
+    return (
+        f"A {m} kg block sits on a board whose angle is slowly increased. The coefficient of static friction "
+        f"is {fmt(mu)}. At what angle does the block start to slide?",
+        f"I'm tilting a plank with a {m} kg block on it (mu_s = {fmt(mu)}). How steep before it slips?",
+        f"{m} kg block on a tilting board, mu_s {fmt(mu)}: angle at which it starts to slide.",
+    )
+
+
 def _spring_energy(rng: random.Random) -> Texts:
     m, k, x = pick(rng, [1, 2, 3]), pick(rng, [200, 400, 500]), pick(rng, [0.1, 0.15, 0.2])
     return (
@@ -283,6 +316,9 @@ CATEGORIES: dict[str, Callable[[random.Random], Texts]] = {
     "calculus motion": _calculus,
     "find the force from the motion": _inverse,
     "find the friction from the motion": _inverse_mu,
+    "threshold force to start moving": _start_force,
+    "threshold stretch to start sliding": _start_extension,
+    "threshold angle to start sliding": _slip_angle,
     "energy method": _spring_energy,
     "momentum or collision": _collision,
     "rotation": _rotation,
