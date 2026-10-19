@@ -108,8 +108,10 @@ export function buildCandidates(
   for (let i = 0; i < m.ids.length; i++) {
     for (let j = i + 1; j < m.ids.length; j++) {
       const rel0 = sub(get(start.x, i), get(start.x, j));
-      if (len(rel0) < EPS_DIST) continue;
-      const e = unit(rel0);
+      // Starting together, the line to watch is the direction they separate in.
+      const relV = sub(get(start.v, i), get(start.v, j));
+      if (len(rel0) < EPS_DIST && len(relV) < EPS_V) continue;
+      const e = len(rel0) < EPS_DIST ? unit(relV) : unit(rel0);
       const along = (s: State) => dot(sub(get(s.x, i), get(s.x, j)), e);
       out.push({
         kind: "meet",

@@ -54,6 +54,26 @@ describe("meet: two bodies reach the same place", () => {
     near(30 * (3 + tau), 524.56, 0.01);
   });
 
+  it("bodies that start together meet again when the chaser catches up: 20 m/s against 2 m/s^2 from rest, at t = 2*20/2 = 20 s, 400 m", () => {
+    const r = run({
+      version: 1.1,
+      bodies: [
+        {
+          id: "car",
+          velocity: { speed: "20 m/s", angle: "0 deg" },
+          constantAcceleration: "0 m/s^2",
+        },
+        { id: "police", constantAcceleration: "2 m/s^2" },
+      ],
+      queries: [
+        { id: "t", ask: "time", until: { event: "meet" } },
+        { id: "x", ask: "position", body: "car", at: { event: "meet" } },
+      ],
+    });
+    near(r["t"]?.value, 20, 1e-4);
+    near((r["x"]?.value as number[])[0], 400, 1e-2);
+  });
+
   it("is answered for either body and in either order of `body` and `with`", () => {
     const scene = (body: string, withId: string) => ({
       version: 1.1,
