@@ -179,3 +179,23 @@ def test_family_restricted_generation():
     only = make_problems(20, 1, prefix="x", families=["unsupported", "partial"])
     assert {p.family for _, p in only} <= {"unsupported", "partial"}
     assert all(pid.startswith("x-") for pid, _ in only)
+
+
+def test_dataset_can_drop_refusals_the_solver_now_handles(tmp_path):
+    from parser_model.dataset import make_dataset
+
+    scene = {"version": 1.1, "bodies": []}
+    records = [
+        {
+            "id": f"p{n}",
+            "parent": f"p{n}",
+            "family": "x",
+            "style": "terse",
+            "question": f"q{n}",
+            "scene": {"unsupported": "two bodies meeting"} if n % 2 else scene,
+        }
+        for n in range(200)
+    ]
+    summary = make_dataset(records, tmp_path, drop_refusal_reasons=("two bodies meeting",))
+    total = summary["train"] + summary["val"] + summary["test"]
+    assert total == 100

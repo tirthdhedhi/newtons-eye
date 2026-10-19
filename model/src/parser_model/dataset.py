@@ -52,11 +52,16 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def make_dataset(
-    records: list[dict[str, Any]], out_dir: Path, holdout_families: tuple[str, ...] = ()
+    records: list[dict[str, Any]],
+    out_dir: Path,
+    holdout_families: tuple[str, ...] = (),
+    drop_refusal_reasons: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     forbidden = seed_scene_keys()
     kept = []
     for record in records:
+        if record["scene"].get("unsupported") in drop_refusal_reasons:
+            continue  # the solver can do this now: a refusal example would teach the opposite
         scene = dict(record["scene"])
         scene.pop("title", None)
         if json.dumps(scene, sort_keys=True) not in forbidden:
@@ -112,6 +117,12 @@ def main(argv: list[str] | None = None) -> int:
         "--reuse", action="store_true", help="use an existing synthetic.jsonl, do not regenerate"
     )
     p.add_argument(
+        "--drop-refusal",
+        action="append",
+        default=[],
+        help="drop refusal examples with this reason (a capability the solver now has)",
+    )
+    p.add_argument(
         "--extra",
         action="append",
         default=[],
@@ -140,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             records.append(r)
     if dropped_drift:
         print(f"dropped {dropped_drift} paraphrases that changed the physics")
-    summary = make_dataset(records, out, tuple(args.holdout_family))
+    summary = make_dataset(records, out, tuple(args.holdout_family), tuple(args.drop_refusal))
     print(json.dumps(summary, indent=2))
     return 0
 
