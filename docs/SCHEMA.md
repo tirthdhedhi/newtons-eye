@@ -43,7 +43,9 @@ Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes 
   direction of motion (toward +x if it starts at rest). The resolver adds the force `m (a - g)` that does it, so
   "a car at 20 m/s accelerates at 3 m/s^2 for 8 s" needs no force or surface. Not allowed on a body that touches a
   surface. (The key is not `acceleration`: that name is reserved for the solver's answer.)
-- `body.shape` optional, default box `[0.4, 0.2, 0.4]`. `body.position` optional (origin, or resting on its contact surface).
+- `body.shape` optional. Default: a point when the body has a position or velocity and no `placement` (a
+  projectile lands exactly when its centre reaches the ground); otherwise a box `[0.4, 0.2, 0.4]` so a body placed on
+  a surface sits flush. `body.position` optional (origin, or resting on its contact surface).
 - `body.placement`:
   - `{ on: <planeId>, at: "top" | "bottom" | <distance> }`: rest flush on the plane (`top` is the extent length along the slope).
     Position and orientation are computed. `{ on, offset: <distance> }` is the same for horizontal planes.

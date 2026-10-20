@@ -97,3 +97,34 @@ describe("authoring: optional mass and prescribed acceleration", () => {
     if (!r.ok) expect(r.errors[0]?.message).toMatch(/cannot also touch a surface/);
   });
 });
+
+describe("authoring: the default shape of a projectile", () => {
+  it("a body with a velocity and no shape or placement is a point, so it lands exactly when its centre reaches the ground (4.922 s for 15 m/s up from 45 m)", () => {
+    const { byId, warnings } = run({
+      version: 1.1,
+      bodies: [
+        { id: "ball", position: [0, 45, 0], velocity: { speed: "15 m/s", angle: "90 deg" } },
+      ],
+      surfaces: [{ id: "ground", kind: "plane" }],
+      contacts: [{ body: "ball", surface: "ground" }],
+      queries: [
+        { id: "t", ask: "time", until: { event: "land" }, body: "ball" },
+        { id: "h", ask: "max_height", body: "ball" },
+      ],
+    });
+    near(byId["t"]?.value, (15 + Math.sqrt(225 + 2 * G * 45)) / G, 1e-6);
+    near(byId["h"]?.value, 45 + 225 / (2 * G), 1e-6);
+    expect(warnings.some((w) => w.includes("using a point"))).toBe(true);
+  });
+
+  it("a block placed on a surface still gets the default box (it must sit flush)", () => {
+    const { warnings } = run({
+      version: 1.1,
+      bodies: [{ id: "b", mass: "2 kg", placement: { on: "floor", offset: 0 } }],
+      surfaces: [{ id: "floor", kind: "plane" }],
+      contacts: [{ body: "b", surface: "floor" }],
+      queries: [{ id: "x", ask: "position", body: "b", at: 1 }],
+    });
+    expect(warnings.some((w) => w.includes("using a box"))).toBe(true);
+  });
+});

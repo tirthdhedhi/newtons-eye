@@ -74,6 +74,13 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
   a.bodies.forEach((b, i) => {
     if (b.shape) {
       shapes.set(b.id, b.shape);
+    } else if ((b.position || b.velocity) && !b.placement) {
+      // Given a position or a velocity but no placement on a surface: a projectile, so a point.
+      shapes.set(b.id, { kind: "point" });
+      note(
+        `bodies[${i}].shape`,
+        `"${b.id}" has no shape and a position or velocity but no placement: using a point`,
+      );
     } else {
       shapes.set(b.id, { ...DEFAULT_SHAPE, size: [...DEFAULT_SHAPE.size] });
       note(
