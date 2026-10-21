@@ -50,3 +50,21 @@ def load_seed(path: str | Path) -> list[dict[str, Any]]:
         if line.strip():
             items.append(json.loads(line))
     return items
+
+
+REFUSAL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"unsupported": {"type": "string", "minLength": 1}},
+    "required": ["unsupported"],
+    "additionalProperties": False,
+}
+
+
+def constrained_schema(allow_refusal: bool = True) -> dict[str, Any]:
+    """Schema for constrained decoding: a valid scene, plus (by default) a refusal.
+
+    The union made the model refuse in-scope questions (the grammar changes its first-token
+    behaviour), so ``allow_refusal=False`` gives the scene-only schema for a retry.
+    """
+    scene = {k: v for k, v in load_schema().items() if k != "$schema"}
+    return {"anyOf": [scene, REFUSAL_SCHEMA]} if allow_refusal else scene

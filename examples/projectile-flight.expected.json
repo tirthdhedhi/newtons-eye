@@ -1,0 +1,26 @@
+{
+  "scene": "projectile-flight.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "T": {
+      "value": 4.677484,
+      "unit": "s",
+      "note": "2 v sin(a) / g"
+    },
+    "H": {
+      "value": 26.828944,
+      "unit": "m",
+      "note": "(v sin a)^2 / 2g"
+    },
+    "R": {
+      "value": 153.262813,
+      "unit": "m",
+      "note": "v^2 sin(2a) / g"
+    },
+    "v": {
+      "value": [32.766082, -22.943057, 0],
+      "unit": "m/s",
+      "note": "vx, -vy at the landing"
+    }
+  }
+}

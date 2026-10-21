@@ -71,12 +71,15 @@ export type EventKind =
   | "cut_string"
   | "set_force"
   | "force_on"
-  | "force_off";
+  | "force_off"
+  | "meet";
 
 export interface SolvedEvent {
   t: number;
   kind: EventKind;
   body?: Id;
+  /** For `meet`: the other body. */
+  other?: Id;
   connection?: Id;
   /** Id of the user event or force this came from. */
   ref?: Id;

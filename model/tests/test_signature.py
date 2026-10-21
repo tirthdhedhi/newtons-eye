@@ -104,3 +104,36 @@ def test_tolerance_is_relative_1e_3():
     assert not values_close([1.0, 0.0], [1.0, 0.0, 0.0])
     assert not values_close(None, 1.0)
     assert not values_close(1.0, [1.0])
+
+
+def test_max_height_signature_defaults_to_ground_and_separates_start():
+    ground = query_signature({"ask": "max_height", "body": "b"})
+    assert ground == query_signature({"ask": "max_height", "body": "b", "above": "ground"})
+    assert ground != query_signature({"ask": "max_height", "body": "b", "above": "start"})
+
+
+def test_event_times_and_landing_queries_are_part_of_the_signature():
+    land = {"ask": "velocity", "body": "b", "at": {"event": "land"}}
+    assert query_signature(land) != query_signature({"ask": "velocity", "body": "b", "at": 1})
+    assert query_signature(land) == query_signature(dict(land))
+    until_land = {"ask": "time", "body": "b", "until": {"event": "land"}}
+    assert query_signature(until_land) != query_signature(
+        {"ask": "time", "body": "b", "until": {"event": "stop"}}
+    )
+
+
+def test_missing_time_means_zero():
+    base = {"ask": "acceleration", "body": "b"}
+    assert query_signature(base) == query_signature({**base, "at": 0})
+    assert query_signature(base) != query_signature({**base, "at": 1})
+
+
+def test_bodies_without_a_mass_are_matched_by_position_not_by_id():
+    gold = scene({"id": "v", "ask": "velocity", "body": "car", "at": 8}, bodies=[{"id": "car"}])
+    model = scene({"id": "x", "ask": "velocity", "body": "body", "at": 8}, bodies=[{"id": "body"}])
+    assert list(signatures(gold).values()) == list(signatures(model).values())
+    two = [{"id": "a"}, {"id": "b"}]
+    q = lambda body: {"id": "v", "ask": "velocity", "body": body, "at": 1}  # noqa: E731
+    first = scene(q("a"), bodies=two)
+    swapped = scene(q("b"), bodies=two)
+    assert list(signatures(first).values()) != list(signatures(swapped).values())

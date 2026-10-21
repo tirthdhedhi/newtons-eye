@@ -1,0 +1,16 @@
+{
+  "scene": "car-accelerates.authoring.json",
+  "tolerance": 0.001,
+  "answers": {
+    "v": {
+      "value": [44, 0, 0],
+      "unit": "m/s",
+      "note": "u + a t = 20 + 3*8"
+    },
+    "x": {
+      "value": [256, 0, 0],
+      "unit": "m",
+      "note": "u t + a t^2 / 2 = 160 + 96"
+    }
+  }
+}

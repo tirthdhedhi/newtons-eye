@@ -181,3 +181,22 @@ def test_items_with_their_own_gold_scene():
     )
     r = evaluate_item(item, json.dumps(good_scene()), schema=SCHEMA, gold=gold, solver=FakeSolver())
     assert r.solver_match
+
+
+def test_refusal_is_correct_only_for_unsupported_items():
+    refusal = json.dumps({"unsupported": "circular motion"})
+    out_of_scope = {**ITEM, "id": "u/1", "expect": "unsupported"}
+    gold = GoldCache(lambda ex: pytest.fail("no gold for a refusal"), FakeSolver())
+    ok = evaluate_item(out_of_scope, refusal, schema=SCHEMA, gold=gold, solver=FakeSolver())
+    assert [ok.valid_json, ok.schema_valid, ok.solver_ok, ok.grounded, ok.solver_match] == [
+        True
+    ] * 5
+    # a scene for an unsupported question is wrong ...
+    bad = evaluate_item(
+        out_of_scope, json.dumps(good_scene()), schema=SCHEMA, gold=gold, solver=FakeSolver()
+    )
+    assert not bad.solver_match and bad.failure_reason.startswith("should_refuse")
+    # ... and so is a refusal for a question the solver can answer
+    wrongly = run(refusal)
+    assert wrongly.valid_json and not wrongly.schema_valid and not wrongly.solver_match
+    assert wrongly.failure_reason.startswith("refused_in_scope")

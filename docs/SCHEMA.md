@@ -14,7 +14,18 @@ Source of truth: `packages/core/src/schema`. Scene JSON holds only givens.
 - Connections: `string` and `pulley_string` (ideal pulley; `endA`/`endB` are where the string leaves it).
 - Events: `release` (a body is held until then), `cut_string`, `set_force`.
 - Queries: acceleration, velocity, position, force (normal, friction, tension, net), time (until stop, edge,
-  slack, slide_start), distance, work, min_mu_s, relative_velocity.
+  land, slack, slide_start), distance, work, min_mu_s, relative_velocity, max_height, range.
+  - `time` `until: { event: "land" }`: when the body's lowest point reaches the plane it is in `contacts` with
+    (time of flight). `velocity`/`position`/`acceleration` with `at: { event: "land" }` read the instant _before_
+    the impact. Give a projectile `"shape": { "kind": "point" }` so it lands when its centre reaches the plane
+    (the default authoring box lands 0.1 m early).
+  - `time` `until: { event: "meet" }` (optional `body` and `with`): when two bodies reach the same place, i.e. their
+    separation along the initial line between them reaches zero (exact for motion along that line). Positions at
+    `at: { event: "meet" }` work for either body. A body held until a `release` event can start the chase later
+    ("the police car starts from rest 3 s later"); `constantAcceleration: "0 m/s^2"` keeps the car moving steadily.
+  - `max_height`: highest point before landing (or the end of the simulation). `above: "ground"` (default) is
+    the height above the body's contact plane, `above: "start"` the height above the starting position.
+  - `range`: horizontal distance from the starting position to the landing point. Errors if the body never lands.
 - Keys the solver computes (`normal`, `tension`, `acceleration`, `answer`, ...) are rejected anywhere in the JSON.
 - `parseScene(json)` returns the SI scene or a list of `{ path, message }` issues, plus warnings.
 - `examples/<name>.scene.json` pairs with `<name>.expected.json` (hand-computed values per query id).
@@ -26,7 +37,15 @@ A scene with `"version": 1.1` may use sugar that `parseScene` resolves into the 
 in a word problem: no coordinates, quaternions, shape sizes, durations, or pulley/anchor positions.
 Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes `schema/authoring.schema.json`.
 
-- `body.shape` optional, default box `[0.4, 0.2, 0.4]`. `body.position` optional (origin, or resting on its contact surface).
+- `body.mass` optional, default 1 kg (a warning says so): it only matters when a force other than gravity acts, so
+  projectile and kinematics problems need not give one.
+- `body.constantAcceleration` (e.g. `"3 m/s^2"`, negative brakes): the body accelerates by exactly this much along its
+  direction of motion (toward +x if it starts at rest). The resolver adds the force `m (a - g)` that does it, so
+  "a car at 20 m/s accelerates at 3 m/s^2 for 8 s" needs no force or surface. Not allowed on a body that touches a
+  surface. (The key is not `acceleration`: that name is reserved for the solver's answer.)
+- `body.shape` optional. Default: a point when the body has a position or velocity and no `placement` (a
+  projectile lands exactly when its centre reaches the ground); otherwise a box `[0.4, 0.2, 0.4]` so a body placed on
+  a surface sits flush. `body.position` optional (origin, or resting on its contact surface).
 - `body.placement`:
   - `{ on: <planeId>, at: "top" | "bottom" | <distance> }`: rest flush on the plane (`top` is the extent length along the slope).
     Position and orientation are computed. `{ on, offset: <distance> }` is the same for horizontal planes.
@@ -36,7 +55,10 @@ Source: `packages/core/src/authoring`. JSON Schema: `pnpm schema:export` writes 
   level with the connected body resting on it). If omitted it is inferred the same way from a connected body's contact.
 - `surfaces[].point` optional (origin). `spring.anchor` may be `{ fixed: true, stretch: <distance> }`: the anchor is
   fixed so the spring is at natural length at the body's placement, and the body starts displaced by `stretch`.
-- `duration` optional: the latest time any query references (events included) + 1 s, at least 2 s.
+- `duration` optional: the latest time any query references (events included) + 1 s, at least 2 s. If a query
+  waits for an event (a `time` until, `range`, `max_height`, or a `distance` with no `to`) the default is 60 s,
+  so "when does it stop", "how far does it go" and "time of flight" need no window.
+- A body that touches a plane while moving away from it (a launch) leaves the plane; it is not held on it.
 - Every default or inference is returned in `parseScene(...).warnings`.
 
 `pnpm solve <file>` accepts either form and prints `{ queryId: value }`; on a validation failure it prints the issues

@@ -27,6 +27,8 @@ const UNITS: Record<string, string> = {
   relative_velocity: "m/s",
   distance: "m",
   work: "J",
+  max_height: "m",
+  range: "m",
   min_mu_s: "",
   time: "s",
 };
@@ -42,9 +44,13 @@ function resolveTime(
   const user = tl.model.scene.events.find((e) => e.id === ref);
   if (user) return user.at;
   const ev = tl.events.find(
-    (e) => e.kind === ref && (bodyId === undefined || e.body === undefined || e.body === bodyId),
+    (e) =>
+      e.kind === ref &&
+      (bodyId === undefined || e.body === undefined || e.body === bodyId || e.other === bodyId),
   );
-  return ev ? ev.t : null;
+  if (!ev) return null;
+  // A query "at the landing" means the instant before the impact, not the body at rest after it.
+  return ev.kind === "land" ? ev.t - 1e-9 : ev.t;
 }
 
 export function evaluateQuery(tl: Timeline, q: Query): Answer {
@@ -55,9 +61,14 @@ export function evaluateQuery(tl: Timeline, q: Query): Answer {
 
   if (q.ask === "time") {
     const kind = q.until.event;
-    const ev = tl.events.find(
-      (e) => e.kind === kind && (q.body === undefined || e.body === undefined || e.body === q.body),
-    );
+    const ev = tl.events.find((e) => {
+      if (e.kind !== kind) return false;
+      if (kind === "meet") {
+        const pair = [q.body, q.with].filter((x): x is string => x !== undefined);
+        return pair.every((id) => e.body === id || e.other === id);
+      }
+      return q.body === undefined || e.body === undefined || e.body === q.body;
+    });
     return ev
       ? { id: q.id, ask: q.ask, value: ev.t, unit }
       : fail(`"${kind}" never happens within ${tl.duration} s`);
@@ -122,6 +133,33 @@ export function evaluateQuery(tl: Timeline, q: Query): Answer {
           ? sub(b.position, fPos)
           : sub(b.velocity, fVel);
     return { id: q.id, ask: q.ask, value, unit };
+  }
+
+  if (q.ask === "max_height" || q.ask === "range") {
+    const i = bodyIdx ?? 0;
+    const bodyId = q.body;
+    const land = tl.events.find(
+      (e) => e.kind === "land" && (e.body === undefined || e.body === bodyId),
+    );
+    const ci = m.contacts.findIndex((c) => c.body === i);
+    if (q.ask === "range") {
+      if (!land) return fail('the body never lands ("land" never happens within the simulation)');
+      const p0 = get(tl.stateAt(0).x, i);
+      const p1 = get(tl.stateAt(land.t).x, i);
+      return { id: q.id, ask: q.ask, value: Math.hypot(p1[0] - p0[0], p1[2] - p0[2]), unit };
+    }
+    const end = land ? land.t : tl.duration;
+    const n = Math.min(40000, Math.max(1, Math.ceil(end / 0.0005)));
+    let top = -Infinity;
+    for (let k = 0; k <= n; k++) top = Math.max(top, get(tl.stateAt((end * k) / n).x, i)[1]);
+    const p0 = get(tl.stateAt(0).x, i);
+    let ref = p0[1];
+    if (q.above !== "start") {
+      if (ci < 0) return fail("max height above the ground needs a surface contact");
+      const pl = get(m.planes, get(m.contacts, ci).plane);
+      ref = pl.P[1] + get(m.contacts, ci).support;
+    }
+    return { id: q.id, ask: q.ask, value: top - ref, unit };
   }
 
   if (q.ask === "distance" || q.ask === "work") {

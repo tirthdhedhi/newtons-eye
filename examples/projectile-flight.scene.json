@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "title": "Projectile launched at 40 m/s and 35 degrees from level ground: time of flight, maximum height, range, impact velocity",
+  "duration": "6 s",
+  "bodies": [
+    {
+      "id": "ball",
+      "shape": {
+        "kind": "point"
+      },
+      "mass": "1 kg",
+      "position": [0, 0, 0],
+      "velocity": [32.766082, 22.943057, 0]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "ground",
+      "kind": "plane",
+      "point": [0, 0, 0]
+    }
+  ],
+  "contacts": [
+    {
+      "body": "ball",
+      "surface": "ground"
+    }
+  ],
+  "queries": [
+    {
+      "id": "T",
+      "ask": "time",
+      "until": {
+        "event": "land"
+      },
+      "body": "ball"
+    },
+    {
+      "id": "H",
+      "ask": "max_height",
+      "body": "ball"
+    },
+    {
+      "id": "R",
+      "ask": "range",
+      "body": "ball"
+    },
+    {
+      "id": "v",
+      "ask": "velocity",
+      "body": "ball",
+      "at": {
+        "event": "land"
+      }
+    }
+  ]
+}

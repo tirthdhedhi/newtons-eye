@@ -65,7 +65,10 @@ export function selectRegimes(
 ): { regimes: Regimes; instant: Instant } {
   const contacts = m.contacts.map((c, ci): Regimes["contacts"][number] => {
     if (get(detached, ci) || isPinned(m, c.body, t)) return "inactive";
-    return signedDistance(m, c, s) <= EPS_DIST ? "static" : "inactive";
+    if (signedDistance(m, c, s) > EPS_DIST) return "inactive";
+    // Touching but already moving away from the surface (a launch): it leaves, it is not held.
+    const away = dot(get(s.v, c.body), get(m.planes, c.plane).n) > EPS_V;
+    return away ? "inactive" : "static";
   });
   const slideDir: (Vec3 | null)[] = m.contacts.map(() => null);
   const strings = m.strings.map((st): Regimes["strings"][number] => {

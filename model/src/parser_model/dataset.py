@@ -18,8 +18,9 @@ from typing import Any
 
 from . import paths
 from .generate import build
+from .paraphrase import drifted
 from .prompts import finetune_messages
-from .splits import assign, check_no_leakage
+from .splits import _normalise, assign, check_no_leakage
 
 
 def compact(scene: dict[str, Any]) -> str:
@@ -51,16 +52,28 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def make_dataset(
-    records: list[dict[str, Any]], out_dir: Path, holdout_families: tuple[str, ...] = ()
+    records: list[dict[str, Any]],
+    out_dir: Path,
+    holdout_families: tuple[str, ...] = (),
+    drop_refusal_reasons: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     forbidden = seed_scene_keys()
     kept = []
     for record in records:
+        if record["scene"].get("unsupported") in drop_refusal_reasons:
+            continue  # the solver can do this now: a refusal example would teach the opposite
         scene = dict(record["scene"])
         scene.pop("title", None)
         if json.dumps(scene, sort_keys=True) not in forbidden:
             kept.append(record)
     splits = assign(kept, holdout_families)
+    # Two different problems can render the same question (same numbers): keep it in training only.
+    train_questions = {_normalise(r["question"]) for r in splits["train"]}
+    dropped_dupes = 0
+    for name in ("val", "test"):
+        unique = [r for r in splits[name] if _normalise(r["question"]) not in train_questions]
+        dropped_dupes += len(splits[name]) - len(unique)
+        splits[name] = unique
     check_no_leakage(splits)
     seed_questions = {
         r["question"] for r in paths.load_seed(paths.model_dir() / "data" / "seed.jsonl")
@@ -80,12 +93,14 @@ def make_dataset(
                 "style": r["style"],
                 "question": r["question"],
                 "scene": r["scene"],
+                **({"expect": r["expect"]} if "expect" in r else {}),
             }
             for r in splits["test"]
         ],
     )
     return {
         "dropped_as_seed_duplicates": len(records) - len(kept),
+        "dropped_val_test_questions_also_in_train": dropped_dupes,
         **{name: len(rows) for name, rows in splits.items()},
         "problems": {name: len({r["parent"] for r in rows}) for name, rows in splits.items()},
     }
@@ -98,15 +113,45 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=str(paths.model_dir() / "data" / "ft"))
     p.add_argument("--holdout-family", action="append", default=[])
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument(
+        "--reuse", action="store_true", help="use an existing synthetic.jsonl, do not regenerate"
+    )
+    p.add_argument(
+        "--drop-refusal",
+        action="append",
+        default=[],
+        help="drop refusal examples with this reason (a capability the solver now has)",
+    )
+    p.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        help="more records to merge before splitting (e.g. paraphrases); split by their parent",
+    )
     args = p.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     raw = out / "synthetic.jsonl"
-    report = build(args.problems, args.seed, raw, args.workers)
-    print(f"generated {report['kept']}/{report['requested']} verified problems")
-    for pid, why in report["dropped"][:10]:
-        print(f"  dropped {pid}: {why[:120]}")
-    summary = make_dataset(load_records(raw), out, tuple(args.holdout_family))
+    if args.reuse and raw.exists():
+        print(f"reusing {raw}")
+    else:
+        report = build(args.problems, args.seed, raw, args.workers)
+        print(f"generated {report['kept']}/{report['requested']} verified problems")
+        for pid, why in report["dropped"][:10]:
+            print(f"  dropped {pid}: {why[:120]}")
+    records = load_records(raw)
+    by_id = {r["id"]: r for r in records}
+    dropped_drift = 0
+    for extra in args.extra:
+        for r in load_records(Path(extra)):
+            base = by_id.get(r["id"].removeprefix("para/"))
+            if base is not None and drifted(base["question"], r["question"]):
+                dropped_drift += 1
+                continue
+            records.append(r)
+    if dropped_drift:
+        print(f"dropped {dropped_drift} paraphrases that changed the physics")
+    summary = make_dataset(records, out, tuple(args.holdout_family), tuple(args.drop_refusal))
     print(json.dumps(summary, indent=2))
     return 0
 

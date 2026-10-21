@@ -1,0 +1,16 @@
+{
+  "scene": "police-chase.authoring.json",
+  "tolerance": 0.01,
+  "answers": {
+    "t": {
+      "value": 17.485281,
+      "unit": "s",
+      "note": "30 t = 5 (t - 3)^2 / 2, so t = 3 + (30 + sqrt(1800)) / 5"
+    },
+    "x": {
+      "value": [524.558441, 0, 0],
+      "unit": "m",
+      "note": "30 t"
+    }
+  }
+}

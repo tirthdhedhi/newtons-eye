@@ -10,3 +10,10 @@ data/ft/
 adapters/
 colab/bundle.zip
 data/ft2/
+data/ft3/
+data/ft4/
+exports/
+.venv-gguf/
+data/ft5/
+data/ft6/
+data/ft7/

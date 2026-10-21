@@ -134,6 +134,13 @@ export function simulate(scene: Scene): Timeline {
         case "lift":
           note({ t, kind: "lift", body, description: `${body} leaves the surface` });
           break;
+        case "meet": {
+          const [a, b] = c.pair ?? [0, 0];
+          const ida = get(m.ids, a);
+          const idb = get(m.ids, b);
+          note({ t, kind: "meet", body: ida, other: idb, description: `${ida} meets ${idb}` });
+          break;
+        }
         case "slide_start":
           note({ t, kind: "slide_start", body, description: `${body} starts to slide` });
           break;

@@ -389,6 +389,12 @@
           "fixed": {
             "type": "boolean"
           },
+          "constantAcceleration": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
           "placement": {
             "anyOf": [
               {
@@ -456,8 +462,7 @@
           }
         },
         "required": [
-          "id",
-          "mass"
+          "id"
         ],
         "additionalProperties": false
       }
@@ -1484,6 +1489,8 @@
                     "enum": [
                       "stop",
                       "edge",
+                      "land",
+                      "meet",
                       "slack",
                       "slide_start"
                     ]
@@ -1495,6 +1502,10 @@
                 "additionalProperties": false
               },
               "body": {
+                "type": "string",
+                "minLength": 1
+              },
+              "with": {
                 "type": "string",
                 "minLength": 1
               }
@@ -1536,6 +1547,59 @@
                   "number",
                   "string"
                 ]
+              }
+            },
+            "required": [
+              "id",
+              "ask",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ask": {
+                "type": "string",
+                "const": "max_height"
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              },
+              "above": {
+                "type": "string",
+                "enum": [
+                  "ground",
+                  "start"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "ask",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ask": {
+                "type": "string",
+                "const": "range"
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
               }
             },
             "required": [

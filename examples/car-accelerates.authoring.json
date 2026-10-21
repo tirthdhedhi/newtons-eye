@@ -1,0 +1,28 @@
+{
+  "version": 1.1,
+  "title": "A car at 20 m/s accelerates at 3 m/s^2 for 8 s: final velocity and displacement (no mass given)",
+  "bodies": [
+    {
+      "id": "car",
+      "velocity": {
+        "speed": "20 m/s",
+        "angle": "0 deg"
+      },
+      "constantAcceleration": "3 m/s^2"
+    }
+  ],
+  "queries": [
+    {
+      "id": "v",
+      "ask": "velocity",
+      "body": "car",
+      "at": 8
+    },
+    {
+      "id": "x",
+      "ask": "position",
+      "body": "car",
+      "at": 8
+    }
+  ]
+}

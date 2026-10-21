@@ -9,7 +9,8 @@ solver_match  the solver's answers equal the gold scene's, query by query, match
 
 A signature is ``(ask, body, force, connection, until, at, from, to)``. ``connection`` and
 ``from``/``to`` are added to the signature so tension and work queries stay distinct. Bodies are
-named by mass (SI) when the scene gives one, so ``"box"`` and ``"block"`` are the same body; a
+named by mass (SI) when the scene gives one, else by their position in the list, so ``"box"`` and
+``"block"`` are the same body (and so are ``"car"`` and ``"body"`` when neither has a mass); a
 connection is named by the masses of the bodies it joins. Quantity strings are converted to SI.
 """
 
@@ -60,11 +61,12 @@ def _canon(value: Any) -> Any:
 
 
 def _body_names(scene: dict[str, Any]) -> dict[str, Any]:
+    """Body id -> a name that does not depend on the id: its mass, else its position in the list."""
     names: dict[str, Any] = {}
-    for body in scene.get("bodies") or []:
+    for index, body in enumerate(scene.get("bodies") or []):
         if isinstance(body, dict) and "id" in body:
             mass = _si(body.get("mass"))
-            names[body["id"]] = mass if isinstance(mass, float) else body["id"]
+            names[body["id"]] = mass if isinstance(mass, float) else f"#{index}"
     return names
 
 
@@ -83,15 +85,21 @@ def query_signature(query: dict[str, Any], scene: dict[str, Any] | None = None) 
     conns = _connection_names(scene, bodies)
     body = query.get("body")
     conn = query.get("connection")
+    ask = query.get("ask")
+    at = query.get("at")
+    if at is None and ask in ("acceleration", "velocity", "position", "force", "relative_velocity"):
+        at = 0  # the solver reads a missing time as t = 0
+    above = query.get("above") or ("ground" if ask == "max_height" else None)
     return (
-        query.get("ask"),
+        ask,
         bodies.get(body, body),
         query.get("force"),
         conns.get(conn, conn),
         _canon(query.get("until")),
-        _si(query.get("at")),
+        _canon(at),
         _si(query.get("from")),
         _si(query.get("to")),
+        above,
     )
 
 
@@ -145,7 +153,9 @@ def _describe(sig: Signature) -> str:
     return " ".join(
         f"{k}={v}"
         for k, v in zip(
-            ("ask", "body", "force", "conn", "until", "at", "from", "to"), sig, strict=True
+            ("ask", "body", "force", "conn", "until", "at", "from", "to", "above"),
+            sig,
+            strict=True,
         )
         if v is not None
     )
@@ -236,6 +246,18 @@ def evaluate_item(
         return result
     result.scene = scene
     result.valid_json = True
+
+    refused = set(scene) == {"unsupported"}
+    if item.get("expect") == "unsupported":
+        # Out of scope: the only correct answer is a refusal; every check passes with it.
+        if refused:
+            result.schema_valid = result.solver_ok = result.grounded = result.solver_match = True
+        else:
+            result.failures.append("should_refuse: produced a scene for an unsupported question")
+        return result
+    if "unsupported" in scene:
+        result.failures.append(f"refused_in_scope: {scene.get('unsupported')}")
+        return result
 
     errors = sorted(
         jsonschema.Draft202012Validator(schema).iter_errors(scene), key=lambda e: list(e.path)

@@ -1,0 +1,21 @@
+{
+  "scene": "building-throw.scene.json",
+  "tolerance": 0.001,
+  "answers": {
+    "H": {
+      "value": 56.46789,
+      "unit": "m",
+      "note": "h + u^2 / 2g"
+    },
+    "T": {
+      "value": 4.922032,
+      "unit": "s",
+      "note": "(u + sqrt(u^2 + 2 g h)) / g"
+    },
+    "v": {
+      "value": [0, -33.285132, 0],
+      "unit": "m/s",
+      "note": "u - g T, just before impact"
+    }
+  }
+}

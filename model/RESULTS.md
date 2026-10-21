@@ -67,3 +67,199 @@ families (vertical force on a free body, force along a ramp).
   are still the best evidence; add them to `data/hard.jsonl`.
 * The hard set is only 15 items, all by one author.
 * Training used synthetic data only; no textbook text.
+
+
+## v3 (wider scope + refusals) and what it showed
+
+v3 adds: time of flight / max height / range / impact velocity, optional mass, constant-acceleration
+kinematics, spring release, questions with one friction coefficient, and a refusal path
+(`{"unsupported": reason}`) for questions the solver cannot do. Trained on 9,411 examples (12 families,
+about 14% refusals), validation loss 0.072.
+
+| test | v3 3B | v2 3B |
+| --- | --- | --- |
+| seed set (21) | 21 | 21 |
+| hard set (15) | 14 (refused one lift problem as "apparent motion") | 15 |
+| held-out generated (300, incl. refusals) | 297 | n/a (older families) |
+| paraphrases (300, in-scope only) | 287 | 292 |
+| **exam-style dev set: 30 questions written by the project owner** | **20** | not measured |
+
+The 30-question set is the hardest test so far: in-scope questions (10) with hand-verified gold scenes,
+and 20 that should be refused. v3 refused 16 of 20 correctly but got only 4 of 10 in-scope questions
+right. Failures: dropped queries (velocity, time of flight), invented queries (`restoring`, `motion`),
+a missing `until`, and a `position` key inside a surface. Unrefused: spring on an incline, speed at the
+natural length, minimum stretch to start sliding, banked road. That set is now a *development* set
+(the next round of data was written with its style in mind); a fresh batch is needed for a clean test.
+
+Inference experiments on that set, same v3 model:
+
+| setting | solver_match (30) | note |
+| --- | --- | --- |
+| greedy, MLX | 20 | |
+| greedy, Ollama GGUF (Q8_0, exported) | 20 | the export is faithful |
+| Ollama with a constrained-decoding grammar, scene or refusal | 20 | 10 in-scope questions wrongly refused |
+| Ollama with a scene-only grammar (in-scope 10 only) | 0 / 10 | schema-valid but queries get dropped |
+| self-consistency, greedy + 6 samples, keep valid, majority (`--vote 6`) | 22 | the remaining misses are systematic |
+
+So: grammar-constrained decoding is not used (it fights the fine-tuned token habits), and voting gives a
+small gain. The fix has to come from training data.
+
+## Export for local running
+
+`mlx_lm.fuse --dequantize` writes a standard HF model, `convert_hf_to_gguf.py` + `llama-quantize` make a
+GGUF, and `ollama create` imports it (Ollama 0.40's own safetensors import does not support Qwen2).
+The Modelfile bakes in the system prompt, so a client sends only `Problem: <question>\nJSON:`.
+
+
+## v4 (wording variety + partial refusals): current best
+
+v4 adds to v3: richer ask vocabulary ("normal reaction", "total time to reach the ground", "initial
+restoring force", "whether the block moves and its acceleration"), a `partial` family (an in-scope
+problem plus one ask the solver cannot compute, such as energy or momentum, which must be refused instead of
+half-answered), and about 1,400 LLM paraphrases of training questions (gemma3:4b rewrote them; each kept
+only if every number and every asked quantity survived, and 32 that changed the physics were dropped).
+13,903 training examples, 3 000 iterations, validation loss 0.08.
+
+| test | v2 | v3 | **v4** |
+| --- | --- | --- | --- |
+| seed set (21) | 21 | 21 | **21** |
+| hard set (15) | 15 | 14 | 14 (one invented mass) |
+| paraphrases of held-out problems (300, in-scope only) | 292 | 287 | **295 (98.3%)** |
+| held-out generated problems, all 13 families (300) | n/a | 297 | **300** |
+| exam-style dev set written by the project owner (30) | n/a | 20 | **25** |
+
+On the 30-question dev set v4 refuses 18 of 20 out-of-scope questions correctly (v3: 16) and gets 7 of 10
+in-scope questions right (v3: 4). Remaining misses: a dropped `time until land` query (two questions), a
+dropped `velocity` query (one), and two unsupported questions it answered anyway (minimum stretch to start
+sliding, a banked road). Every in-scope miss is a **dropped query, never a wrong value**.
+
+Caveats: the 30 questions were used to steer v4's data, so 25/30 is optimistic; a fresh batch is the honest
+test. The paraphrase and held-out sets share the generator's problem structure. Sleep interrupted the
+overnight scoring on a battery-powered Mac; use `caffeinate` for long runs.
+
+## What to do next
+
+1. Count the asks: train the model to write a one-line "find: ..." summary first, and check the scene
+   covers every asked quantity (resample if not). Targets the dropped-query failures.
+2. More multi-ask training questions (three or four asks, odd orders).
+3. A fresh, never-tuned test set written by someone else.
+4. App-side pipeline (validate, solve, explain, retry, intent labels) around the model.
+5. Widen the solver: relative motion, pulleys, series/parallel springs, circular motion.
+
+
+## Correction: scoring bug that understated the owner's-question numbers
+
+Bodies without a mass were matched by id, so a gold `car` and a model `body` counted as different bodies and correct
+scenes scored as failures. With the fix (bodies without a mass are matched by position) the same saved outputs score:
+
+| run | first reported | corrected |
+| --- | --- | --- |
+| v3, greedy | 20 / 30 | **22 / 30** |
+| v3 + voting (greedy + 6 samples) | 22 / 30 | **25 / 30** |
+| v4, greedy | 25 / 30 | **28 / 30** |
+| v5, greedy | 26 / 30 | **29 / 30** |
+
+The items u5, u8 and u10, which I had described as "dropped queries", were complete and right. The seed, hard,
+paraphrase and held-out sets were not affected (their bodies carry a mass or share ids with the gold scene).
+
+## v5 (the `find:` line, completeness check, multi-ask data): current best
+
+The model writes `"title": "find: <every quantity asked>"` first and then one query per item; a scene that declares
+more than it queries loses the vote. Trained 2,500 more iterations from the v4 weights on 22,492 examples (4,000 new
+verified problems with three to five asks in shuffled order, the retitled v4 data, 1,400 paraphrases), validation
+loss 0.066.
+
+| test | v2 | v3 | v4 | **v5** |
+| --- | --- | --- | --- | --- |
+| seed set (21) | 21 | 21 | 21 | **21** |
+| hard set (15) | 15 | 14 | 14 | **15** |
+| paraphrases of held-out problems (300) | 292 | 287 | 295 | **297 (99.0%)** |
+| held-out generated, 13 families (300) | n/a | 297 | 300 | **300** |
+| owner's 30 questions (corrected) | n/a | 22 | 28 | **29** |
+
+On the 30 questions v5 gets all 10 in-scope questions right and refuses 19 of 20 out-of-scope ones. The one miss
+is u23 ("minimum extension required to start the block moving"): it answers with a scene, in every sample. Refusal
+categories for thresholds to start moving or sliding were added afterwards and are not trained yet.
+
+Exported to Ollama as `newtons-eye-3b-v5` (Q8_0, 3.3 GB, system prompt baked in): greedy 29/30, the same as MLX, and
+voting (`--vote 6`) also 29/30, so the model is already consistent and voting adds nothing here.
+
+Caveats: the owner's questions steered the data of v4 and v5, so 29/30 is optimistic. A fresh set of questions
+written by someone else is the next honest test. The remaining paraphrase-set misses (3 of 300) are one invalid
+JSON, one missing edge-time query, and one in-scope question refused; a fourth item has the right answer but
+uses a speed that is not stated in the question (flagged by the grounding check only).
+
+
+## A second batch of 30 harder questions (clean test), and the refusal safety net
+
+The project owner supplied 30 more, harder questions (numbers 31 to 60: vectors, relative motion, two bodies
+meeting, calculus-defined motion, pulleys, contact forces, springs in series and thresholds, circular motion).
+They were scored on v5 **before any change was made for them**, so this is a clean number. Only one question
+(39, a projectile from a cliff: range, time of flight, impact velocity) is clearly in scope; the other 29 should be
+refused. Question 43 (a block pressed against a wall by an oblique force) is treated as out of scope because the
+authoring layer has no natural way to write a vertical wall with an angled push.
+
+| setting | result |
+| --- | --- |
+| v5, greedy | **25 / 30**: the in-scope question fully right, 24 of 29 refusals |
+| v5 + "unknown ask" safety net (no retraining) | 26 of 29 refusals |
+
+v5 answered five out-of-scope questions with a scene: 38 (position as a cubic polynomial), 40 (two stones,
+separation), 41 (deceleration that grows with time), 43 (block against a wall), 54 (largest extension at rest).
+For 40 and 43 the model's own `find:` line already listed "separation" and "equilibrium", things the solver has no
+query for; a scene whose declared asks fall outside the solver's vocabulary is now treated as a refusal
+(`asks.unknown_asks`, used by the pipeline). The three that remain (38, 41, 54) look like valid asks to the model,
+so they need training data: v6 adds refusal categories for position as a function of time, deceleration that
+changes with time, two projectiles compared, a block pressed against a wall, the largest value at rest, rough then
+smooth floors, and maximum spring compression, written in my own wording. After this change the batch is a
+*development* set too; a third fresh batch is needed for the next clean number.
+
+## Using the model: the pipeline
+
+`parser_model.pipeline.answer_question(client, question)` (CLI: `python -m parser_model.pipeline "<question>"`)
+runs model, checks, solver and explanation, and returns `answered`, `unsupported`, `not_physics` or `failed`:
+
+* refusals from the model, or scenes that declare asks outside the solver's vocabulary, become `unsupported`
+  (or `not_physics`);
+* invalid JSON, schema errors, solver errors, or a scene with fewer queries than its `find:` line are retried
+  (greedy, then sampled at temperature 0.7);
+* an answer is explained in words, with the assumptions the solver made (default mass, default shape) listed.
+
+Live run against the Ollama v5 model: the car question gives "Velocity at t = 8 s: 44 m/s, Position at t = 8 s:
+256 m", the projectile question gives "Time of flight: 4.677 s, Range: 153.3 m, Maximum height: 26.83 m" (all
+matching the closed forms), circular motion is `unsupported`, and "capital of France" is `not_physics`.
+
+
+## v6 (more refusal categories) and the attempt at v7 (two bodies meeting)
+
+**Solver, since v5:** a `meet` event (two bodies reach the same place; works for bodies that start together), a
+default shape of a point for a body with a position or velocity and no placement (a projectile lands when its
+centre reaches the ground), and the earlier flight queries. A `chase` training family covers a pursuit with a
+delayed start, a head-on approach, and a thrown and a dropped ball.
+
+**v6** (v5 plus 1,800 refusal-focused problems and 1,500 in-scope problems, refusals cut back to 16%,
+1,800 iterations, validation loss 0.070):
+
+| test | v5 | v6 |
+| --- | --- | --- |
+| seed set (21) | 21 | 21 |
+| hard set (15) | 15 | 15 |
+| owner's first 30 (current solver, labels from before `meet`) | 29 | 29 |
+| owner's second 30, the clean batch scored on v5 first | 25 | 27 |
+
+v6 now refuses #38 (cubic position), #40 (two stones), #41 (growing deceleration) and #43 (block on a wall)
+correctly, but still answers #47, #53 and #54. The question labels changed when `meet` arrived: #9 (cars B
+overtaking A) and #36 (the police chase) are in scope now, with verified gold scenes, and #37 (two balls that never
+meet) was removed from the scoring as ambiguous. Under the updated labels v5 and v6 both score 28/30 on the
+first batch (they refuse #9, which is now answerable) and v6 scores 25/29 on the second.
+
+**v7 (v6 plus 1,500 chase problems): two attempts diverged.** Continuing from v6 at 3e-5, and again with gradient
+clipping and float32 LoRA weights at 1.5e-5, the validation loss started at 0.073 (iteration 300) and then rose
+to 0.17, 0.23 and NaN. The data has no anomalies (no scientific notation, no long decimals, normal lengths), a
+checkpoint from the first run was also bad in full precision (18/30), so it is not a float16 artifact. The
+iteration-300 checkpoint of the second run is healthy by loss and learned the new capability (89 of 90 held-out
+chase questions), but it also lost refusal discipline (it answers #34, #35, #43, #47, #48, #53, #54) and drifted on the
+seed set (18/21), so it is not used. The next attempt trains from scratch on the whole v7 data set (v8, below).
+
+**v8 (in progress)** trains the full 31,144-example set from scratch, 3,500 iterations at 1e-4 with gradient
+clipping, the way v4 trained successfully. Results will be added here.

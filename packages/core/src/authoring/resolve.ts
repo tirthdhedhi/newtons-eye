@@ -11,11 +11,20 @@ import type { AuthoringBody, AuthoringScene } from "./schema";
 export const DEFAULT_SHAPE = { kind: "box", size: [0.4, 0.2, 0.4] } as const;
 /** Shortest simulation an authoring scene gets when it gives no `duration`. */
 export const MIN_DURATION = 2;
+/**
+ * Simulation length when a query depends on an event (a time until stop/edge/land, a range, a
+ * maximum height, or a distance with no window): the event has to be able to happen.
+ */
+export const EVENT_DURATION = 60;
 /** Extra simulated time after the last time any query refers to. */
 export const DURATION_MARGIN = 1;
 
 type ResolvedShape = z.output<typeof Shape>;
-type OutBody = Omit<AuthoringBody, "placement" | "shape" | "position" | "velocity"> & {
+type OutBody = Omit<
+  AuthoringBody,
+  "placement" | "shape" | "position" | "velocity" | "mass" | "constantAcceleration"
+> & {
+  mass: number;
   shape: ResolvedShape;
   position: Vec3;
   velocity?: Vec3;
@@ -65,6 +74,13 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
   a.bodies.forEach((b, i) => {
     if (b.shape) {
       shapes.set(b.id, b.shape);
+    } else if ((b.position || b.velocity) && !b.placement) {
+      // Given a position or a velocity but no placement on a surface: a projectile, so a point.
+      shapes.set(b.id, { kind: "point" });
+      note(
+        `bodies[${i}].shape`,
+        `"${b.id}" has no shape and a position or velocity but no placement: using a point`,
+      );
     } else {
       shapes.set(b.id, { ...DEFAULT_SHAPE, size: [...DEFAULT_SHAPE.size] });
       note(
@@ -133,11 +149,27 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
   });
 
   // --- bodies --------------------------------------------------------------------------------
+  const prescribed: { id: string; kind: "applied"; body: string; vector: Vec3; frame: "world" }[] =
+    [];
   const bodies: OutBody[] = a.bodies.map((b, i) => {
     const path = `bodies[${i}]`;
     const shape = shapes.get(b.id)!;
     const h = halfHeight(shape);
-    const { placement, position: explicit, velocity, shape: _shape, ...rest } = b;
+    const {
+      placement,
+      position: explicit,
+      velocity,
+      shape: _shape,
+      mass: massGiven,
+      constantAcceleration: acceleration,
+      ...rest
+    } = b;
+    const mass = massGiven ?? 1;
+    if (massGiven === undefined)
+      note(
+        `${path}.mass`,
+        `"${b.id}" has no mass: using 1 kg (it only matters when a force other than gravity acts)`,
+      );
     let position: Vec3 = [0, 0, 0];
     let orientation = b.orientation;
 
@@ -248,8 +280,36 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
       }
     }
 
+    if (acceleration !== undefined) {
+      if (contactSurface.has(b.id)) {
+        err(
+          `${path}.constantAcceleration`,
+          "a body with a prescribed acceleration cannot also touch a surface",
+        );
+      } else {
+        const speed = vel ? Math.hypot(...vel) : 0;
+        const dir: Vec3 = vel && speed > 0 ? scale(vel, 1 / speed) : [1, 0, 0];
+        const wanted = scale(dir, acceleration);
+        const g = a.environment.gravity as Vec3;
+        // The force that cancels gravity and gives the wanted acceleration: m (a - g).
+        const vector = scale([wanted[0] - g[0], wanted[1] - g[1], wanted[2] - g[2]], mass);
+        prescribed.push({
+          id: `${b.id}:acceleration`,
+          kind: "applied",
+          body: b.id,
+          vector,
+          frame: "world",
+        });
+        note(
+          `${path}.constantAcceleration`,
+          `"${b.id}" accelerates at ${fmt(acceleration)} m/s^2 ${vel ? "along its velocity" : "toward +x"} (a force ${fmtVec(vector)} N cancels gravity and does it)`,
+        );
+      }
+    }
+
     return {
       ...rest,
+      mass,
       shape,
       position,
       ...(orientation ? { orientation } : {}),
@@ -285,6 +345,8 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
     return { ...f, anchor: { point: anchorPoint } };
   });
 
+  forces.push(...(prescribed as unknown as typeof forces));
+
   // --- duration ------------------------------------------------------------------------------
   let duration = a.duration;
   if (duration === undefined) {
@@ -302,11 +364,27 @@ export function resolveAuthoring(a: AuthoringScene): ResolveResult {
       if ("from" in q) see(q.from);
       if ("to" in q) see(q.to);
     }
-    duration = Math.max(MIN_DURATION, latest + DURATION_MARGIN);
-    note(
-      "duration",
-      `no duration given: simulating ${fmt(duration)} s (last query time ${fmt(latest)} s + ${DURATION_MARGIN} s, at least ${MIN_DURATION} s)`,
+    const eventDriven = a.queries.some(
+      (q) =>
+        q.ask === "time" ||
+        q.ask === "range" ||
+        q.ask === "max_height" ||
+        (q.ask === "distance" && q.to === undefined) ||
+        ("at" in q && q.at !== undefined && typeof q.at === "object" && !eventAt.has(q.at.event)),
     );
+    duration = Math.max(MIN_DURATION, latest + DURATION_MARGIN);
+    if (eventDriven && duration < EVENT_DURATION) {
+      duration = EVENT_DURATION;
+      note(
+        "duration",
+        `no duration given: simulating ${fmt(duration)} s because a query waits for an event (time until, range, max height, or an open-ended distance)`,
+      );
+    } else {
+      note(
+        "duration",
+        `no duration given: simulating ${fmt(duration)} s (last query time ${fmt(latest)} s + ${DURATION_MARGIN} s, at least ${MIN_DURATION} s)`,
+      );
+    }
   }
 
   if (errors.length > 0) return { ok: false, errors, warnings };

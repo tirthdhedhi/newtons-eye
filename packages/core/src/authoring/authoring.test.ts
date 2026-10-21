@@ -20,6 +20,10 @@ const EXPRESSIBLE = [
   "incline-sliding",
   "incline-static",
   "projectile",
+  "projectile-flight",
+  "building-throw",
+  "car-accelerates",
+  "police-chase",
   "sliding-stop",
   "spring-block",
 ];
