@@ -214,11 +214,30 @@ Hiccup worth recording: one of the new files tripped the linter on long template
 ignore for the refusal templates and wrapped lines elsewhere), and the pipeline's first draft wrote "Impact velocity
 at the instant of land" (reworded to "Impact velocity").
 
-## 10. v6 (in progress)
+## 10. v6, the `meet` event, and the v7 attempts
 
-v6 continues from v5 with 1,800 more iterations on 29,446 examples (refusals downsampled to about 16%), including
-1,800 new refusal-focused problems and 1,500 in-scope problems to keep the balance. Results will be added here and to
-`model/RESULTS.md`.
+**v6** continued from v5 with 1,800 iterations on 29,446 examples (refusals cut back to about 16%), including 1,800
+new refusal-focused problems and 1,500 in-scope problems to keep the balance. It refuses four more of the second
+batch's out-of-scope questions (#38, #40, #41, #43) and scores 27/30 on that batch (v5: 25). Seed set 21/21, hard set
+15/15.
+
+**The `meet` event.** Many of the owner's questions (the police chase, cars overtaking, two balls) need "when do two
+bodies reach the same place". That became a solver feature: an event that fires when the separation along the initial
+line between two bodies reaches zero (or along their relative velocity when they start together), a `with` field on
+the time query, positions at the meeting for either body, a validation check, tests against closed forms, and a
+`chase` training family. "Two bodies meeting" was removed from the refusal categories, and the older refusal examples
+of that reason are dropped when the data is built (`--drop-refusal`). The owner's questions #9 and #36 changed from
+"should refuse" to in scope; #37 was removed from the scoring (its balls never meet).
+
+**v7 diverged twice.** Resuming from v6 on the new data mix, the loss was fine for about 300 iterations and then
+climbed to NaN: first at a learning rate of 3e-5, then with gradient clipping, float32 LoRA weights and 1.5e-5. The
+data was inspected (no anomalies), and a checkpoint was checked in full precision (still bad), which ruled out float16
+arithmetic as the sole cause. The healthy iteration-300 checkpoint learned chase (89/90) but stopped refusing things
+v6 refused and regressed on the seed set, so it was not kept. Lesson: three resumed trainings in a row (v5, v6, v7)
+are one long run with restarted optimizer state; when it goes wrong, train from scratch on the full data.
+
+**v8** trains the same 31,144 examples from scratch (3,500 iterations, 1e-4, clipping). Results will be added here and
+to `model/RESULTS.md`.
 
 ## 11. File map
 

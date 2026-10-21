@@ -228,3 +228,38 @@ runs model, checks, solver and explanation, and returns `answered`, `unsupported
 Live run against the Ollama v5 model: the car question gives "Velocity at t = 8 s: 44 m/s, Position at t = 8 s:
 256 m", the projectile question gives "Time of flight: 4.677 s, Range: 153.3 m, Maximum height: 26.83 m" (all
 matching the closed forms), circular motion is `unsupported`, and "capital of France" is `not_physics`.
+
+
+## v6 (more refusal categories) and the attempt at v7 (two bodies meeting)
+
+**Solver, since v5:** a `meet` event (two bodies reach the same place; works for bodies that start together), a
+default shape of a point for a body with a position or velocity and no placement (a projectile lands when its
+centre reaches the ground), and the earlier flight queries. A `chase` training family covers a pursuit with a
+delayed start, a head-on approach, and a thrown and a dropped ball.
+
+**v6** (v5 plus 1,800 refusal-focused problems and 1,500 in-scope problems, refusals cut back to 16%,
+1,800 iterations, validation loss 0.070):
+
+| test | v5 | v6 |
+| --- | --- | --- |
+| seed set (21) | 21 | 21 |
+| hard set (15) | 15 | 15 |
+| owner's first 30 (current solver, labels from before `meet`) | 29 | 29 |
+| owner's second 30, the clean batch scored on v5 first | 25 | 27 |
+
+v6 now refuses #38 (cubic position), #40 (two stones), #41 (growing deceleration) and #43 (block on a wall)
+correctly, but still answers #47, #53 and #54. The question labels changed when `meet` arrived: #9 (cars B
+overtaking A) and #36 (the police chase) are in scope now, with verified gold scenes, and #37 (two balls that never
+meet) was removed from the scoring as ambiguous. Under the updated labels v5 and v6 both score 28/30 on the
+first batch (they refuse #9, which is now answerable) and v6 scores 25/29 on the second.
+
+**v7 (v6 plus 1,500 chase problems): two attempts diverged.** Continuing from v6 at 3e-5, and again with gradient
+clipping and float32 LoRA weights at 1.5e-5, the validation loss started at 0.073 (iteration 300) and then rose
+to 0.17, 0.23 and NaN. The data has no anomalies (no scientific notation, no long decimals, normal lengths), a
+checkpoint from the first run was also bad in full precision (18/30), so it is not a float16 artifact. The
+iteration-300 checkpoint of the second run is healthy by loss and learned the new capability (89 of 90 held-out
+chase questions), but it also lost refusal discipline (it answers #34, #35, #43, #47, #48, #53, #54) and drifted on the
+seed set (18/21), so it is not used. The next attempt trains from scratch on the whole v7 data set (v8, below).
+
+**v8 (in progress)** trains the full 31,144-example set from scratch, 3,500 iterations at 1e-4 with gradient
+clipping, the way v4 trained successfully. Results will be added here.
