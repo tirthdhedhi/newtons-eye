@@ -9,6 +9,8 @@
 Usage is identical to ``python -m mlx_lm.lora``:  python train_mlx.py --model ... --train --data ...
 """
 
+import os
+
 import mlx.core as mx
 import mlx.optimizers as optim
 import mlx_lm.lora as lora
@@ -44,7 +46,10 @@ def _load_bf16(*args, **kwargs):
     return (model, tokenizer, *rest)
 
 
-lora.load = _load_bf16
+# BASE_FP32=0 keeps the base model's own dtype (the 3B model is stable in float16); the clipping and
+# the float32 LoRA weights stay on.
+if os.environ.get("BASE_FP32", "1") != "0":
+    lora.load = _load_bf16
 
 if __name__ == "__main__":
     lora.main()
